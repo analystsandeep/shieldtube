@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<resources>
+    <string name="app_name">ShieldTube</string>
+    <string name="sign_in_hint">To sign in, visit youtube.com/activate on your phone or computer and enter the code shown on screen. Google sign-in cannot run inside a TV WebView.</string>
+    <string name="shields_ready">Shields ready</string>
+    <string name="engine_loading">Loading shields…</string>
+    <string name="renderer_restarted">Video renderer restarted after a crash</string>
+    <string name="activation_required">Sign in at youtube.com/activate</string>
+    <string name="external_link_blocked">External link blocked</string>
+</resources>

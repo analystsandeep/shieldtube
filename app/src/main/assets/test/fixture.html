@@ -1,0 +1,18 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<!-- Offline instrumented smoke-test page: loads a <video> and one known ad URL.
+     The blocked request is served locally by shouldInterceptRequest, so this
+     test needs no network. -->
+<html>
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>ShieldTube smoke fixture</title>
+</head>
+<body style="background:#000;color:#fff;margin:0">
+<video id="v" width="320" height="180" autoplay muted loop playsinline></video>
+<img id="ad" src="https://doubleclick.net/ads/pixel.gif" width="1" height="1" alt="">
+<script>
+    document.title = 'shieldtube-fixture-ready';
+</script>
+</body>
+</html>

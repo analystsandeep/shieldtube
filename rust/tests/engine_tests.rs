@@ -1,0 +1,168 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+//! Step-1 gate: prove blocking works before any UI exists.
+//! Run with: cargo test --manifest-path rust/Cargo.toml -- --nocapture
+
+use shieldtube::engine::ShieldEngine;
+
+const BASE_RULES: &str = "||doubleclick.net^\n\
+||googlesyndication.com^\n\
+||ads.example.org^$script\n\
+youtube.com##.video-ads\n\
+youtube.com##ytd-display-ad-renderer\n";
+
+fn engine_with(rules: &str, resources: serde_json::Value) -> ShieldEngine {
+    let json = serde_json::json!({
+        "lists": [{
+            "name": "test.txt",
+            "text": rules,
+            "format": "standard",
+            "trusted": true
+        }],
+        "resources": resources
+    })
+    .to_string();
+    ShieldEngine::create(&json).expect("engine must build")
+}
+
+#[test]
+fn blocks_a_known_ad_url() {
+    let engine = engine_with(BASE_RULES, serde_json::json!([]));
+    assert!(
+        engine.check_request(
+            "https://doubleclick.net/ads/banner.js",
+            "https://www.youtube.com/tv",
+            "script"
+        ),
+        "doubleclick must be blocked"
+    );
+    assert!(
+        engine.check_request(
+            "https://googlesyndication.com/pagead/js/adsbygoogle.js",
+            "https://www.youtube.com/tv",
+            "script"
+        ),
+        "googlesyndication must be blocked"
+    );
+}
+
+#[test]
+fn does_not_block_first_party_youtube_assets() {
+    let engine = engine_with(BASE_RULES, serde_json::json!([]));
+    assert!(!engine.check_request(
+        "https://www.youtube.com/s/desktop/abc/js/base.js",
+        "https://www.youtube.com/tv",
+        "script"
+    ));
+}
+
+#[test]
+fn request_type_is_respected() {
+    // A wrong requestType produces false positives (preamble §3 layer 1).
+    let engine = engine_with(BASE_RULES, serde_json::json!([]));
+    let url = "https://ads.example.org/creative.js";
+    assert!(engine.check_request(url, "https://www.youtube.com/tv", "script"));
+    assert!(!engine.check_request(url, "https://www.youtube.com/tv", "image"));
+}
+
+#[test]
+fn player_endpoint_is_never_blocked_even_by_a_matching_rule() {
+    let rules = "||youtube.com/youtubei/v1/player^\n||youtube.com/youtubei/v1/next^\n";
+    let engine = engine_with(rules, serde_json::json!([]));
+    assert!(!engine.check_request(
+        "https://www.youtube.com/youtubei/v1/player?key=abc",
+        "https://www.youtube.com/tv",
+        "xhr"
+    ));
+    assert!(!engine.check_request(
+        "https://www.youtube.com/youtubei/v1/next?key=abc",
+        "https://www.youtube.com/tv",
+        "xhr"
+    ));
+}
+
+#[test]
+fn malformed_url_fails_open() {
+    let engine = engine_with(BASE_RULES, serde_json::json!([]));
+    assert!(!engine.check_request("not a url", "https://www.youtube.com/tv", "script"));
+}
+
+#[test]
+fn cosmetic_for_emits_the_pinned_0_13_5_schema() {
+    let engine = engine_with(BASE_RULES, serde_json::json!([]));
+    let json: serde_json::Value =
+        serde_json::from_str(&engine.cosmetic_for("https://www.youtube.com/watch?v=abc"))
+            .expect("cosmeticFor returns valid JSON");
+
+    // Lead condition 5: assert the exact field set of the pinned crate.
+    assert!(json.get("hide_selectors").is_some());
+    assert!(json.get("procedural_actions").is_some());
+    assert!(json.get("exceptions").is_some());
+    assert!(json.get("injected_script").is_some());
+    assert!(json.get("generichide").is_some());
+    assert!(
+        json.get("style_selectors").is_none(),
+        "adblock 0.13.5 has no style_selectors; if this fails, the pin changed"
+    );
+
+    let hide = json["hide_selectors"].as_array().expect("array");
+    assert!(hide.iter().any(|v| v == ".video-ads"));
+    assert!(hide.iter().any(|v| v == "ytd-display-ad-renderer"));
+    assert_eq!(json["generichide"], false);
+}
+
+#[test]
+fn scriptlet_args_are_already_templated_by_adblock_rust() {
+    // "window.__stTest = '{{1}}';"
+    let resources = serde_json::json!([{
+        "name": "st-test.js",
+        "aliases": [],
+        "kind": "template",
+        "content": "d2luZG93Ll9fc3RUZXN0ID0gJ3t7MX19Jzs=",
+        "dependencies": []
+    }]);
+    let rules = "youtube.com##+js(st-test.js, hello)\n";
+    let engine = engine_with(rules, resources);
+    let json: serde_json::Value =
+        serde_json::from_str(&engine.cosmetic_for("https://www.youtube.com/watch?v=abc"))
+            .expect("valid JSON");
+    let injected = json["injected_script"].as_str().unwrap_or("");
+    assert!(
+        injected.contains("hello"),
+        "engine must substitute {{1}} itself: {injected}"
+    );
+    assert!(
+        !injected.contains("{{1}}"),
+        "no unresolved template placeholders may remain: {injected}"
+    );
+}
+
+#[test]
+fn add_lists_replace_rebuilds_the_engine() {
+    let empty = ShieldEngine::create(r#"{"lists":[],"resources":[]}"#).unwrap();
+    assert!(!empty.check_request(
+        "https://doubleclick.net/a.js",
+        "https://www.youtube.com/tv",
+        "script"
+    ));
+
+    let payload = serde_json::json!({
+        "replace": true,
+        "lists": [{
+            "name": "test.txt", "text": "||doubleclick.net^",
+            "format": "standard", "trusted": false
+        }]
+    })
+    .to_string();
+    assert!(empty.add_lists(&payload).is_ok());
+    assert!(empty.check_request(
+        "https://doubleclick.net/a.js",
+        "https://www.youtube.com/tv",
+        "script"
+    ));
+}
+
+#[test]
+fn invalid_payload_is_rejected_not_panicking() {
+    assert!(ShieldEngine::create("not json").is_err());
+    assert!(ShieldEngine::create("{}").is_ok());
+}

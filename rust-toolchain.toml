@@ -1,0 +1,13 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Pinned toolchain. Keep in sync with scripts/bootstrap-toolchain.sh
+# (SHIELDTUBE_RUST_TOOLCHAIN default) and .github/workflows/ci.yml.
+[toolchain]
+channel = "1.99.1"
+profile = "minimal"
+components = ["rustfmt", "clippy"]
+targets = [
+  "aarch64-linux-android",
+  "armv7-linux-androideabi",
+  "x86_64-linux-android",
+  "i686-linux-android",
+]

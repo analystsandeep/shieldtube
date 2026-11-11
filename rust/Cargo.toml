@@ -1,0 +1,43 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+[package]
+name = "shieldtube"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.85"
+license = "GPL-3.0-or-later"
+publish = false
+description = "JNI + C FFI wrapper around brave/adblock-rust for the ShieldTube Android TV client"
+
+[lib]
+name = "shieldtube"
+crate-type = ["cdylib", "rlib"]
+path = "src/lib.rs"
+
+[dependencies]
+# Exact pin. Verified 2026-11-11 against the published crate
+# sha256:7a4c8558f27608dec74695c866f9a8ef897ec7a77cb826f8a5baf0b8ba461d2a
+# default-features=false drops `single-thread`, making Engine Send + Sync so the
+# single shared instance can serve shouldInterceptRequest from WebView's
+# network thread. See docs/SPEC-DEVIATIONS.md.
+adblock = { version = "=0.13.5", default-features = false, features = [
+    "embedded-domain-resolver",
+    "full-regex-handling",
+] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+jni = "0.21"
+libc = "0.2"
+
+[build-dependencies]
+cbindgen = "0.29"
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+# MUST be unwind: every FFI entry point is wrapped in catch_unwind.
+panic = "unwind"
+strip = "debuginfo"
+
+[profile.dev]
+panic = "unwind"

@@ -1,9 +1,10 @@
 <!-- SPDX-License-Identifier: GPL-3.0-or-later -->
 # Architecture
 
-Status: **step 1 + minimal player** (2026-11-11). Settings, cosmetic layer and
-ad-state watchdog are deferred by the project lead until after the first APK.
-Deferred items are marked **[DEFERRED]**.
+Status: **step 1 + player + settings + cosmetic layer + watchdog**
+(2026-11-12). The last three were listed as **[DEFERRED]** on 2026-11-11 and
+have since landed; this table is checked against the source tree, not against
+the plan. Anything still absent is called out rather than marked done.
 
 ## Module map
 
@@ -13,10 +14,12 @@ Deferred items are marked **[DEFERRED]**.
 | L1 Kotlin binding | `app/.../nativebridge/AdBlockBridge.kt`, `core/AdBlockEngine.kt`, `core/RequestTypeMapper.kt` | JNI bridge, one engine per process, WebView type → uBO type |
 | L1 interception | `player/ShieldWebViewClient.kt` | `shouldInterceptRequest`, empty-body `WebResourceResponse`, `BlockLog` |
 | L2 Scriptlets | `rust` `url_cosmetic_resources().injected_script`, `assets/js/shieldtube-shim.js`, `core/InjectedScript.kt` | one `addDocumentStartJavaScript` script, fetch/XHR patch, `ytInitialPlayerResponse` |
-| L3 Cosmetic | `core/AdBlockEngine.cosmeticFor()` + `core/InjectedScript.kt` (scriptlets only) | JSON-out cosmetic resources **[DEFERRED: CSS `<style>` + MutationObserver]** |
-| L4 Watchdog | — | **[DEFERRED]** |
+| L3 Cosmetic | `core/AdBlockEngine.cosmeticFor()`, `core/CosmeticScript.kt`, `assets/js/shieldtube-cosmetic.js` | JSON-out cosmetic resources -> one `<style>` element, procedural-action evaluator, 250 ms debounced MutationObserver; re-applied on SPA URL changes |
+| L4 Watchdog | `assets/js/shieldtube-watchdog.js` (inside the single document-start script) | 500 ms playback/ad-state tick, stall reporting, ad-segment seek (DOM overlay + <= 180 s only), SPA URL observer |
+| Settings / licences | `settings/SettingsActivity.kt`, `settings/OpenSourceActivity.kt` | D-pad-only shields toggle, /tv vs mobile fallback, UA override, counters, manual list update, clear-data, GPLv3 + source screen |
+| List updates | `core/ListUpdater.kt`, `core/ListPruner.kt` | opportunistic 24 h update of the six list groups into `filesDir/lists`, 2 MiB cap, parsed with `trusted=false` |
 | Diagnostics | `core/BlockLog.kt` | 500-entry preallocated ring buffer, monotonic counters |
-| Vendoring | `scripts/fetch-lists.sh`, `scripts/prune_lists.py`, `assets/lists/`, `assets/legal/` | pinned-SHA, checksummed, 0.97 MiB payload |
+| Vendoring | `scripts/fetch-lists.sh`, `scripts/prune_lists.py`, `assets/lists/`, `assets/legal/` | pinned-SHA, checksummed, **1.14 MiB** payload (1,191,228 B; 2 MiB cap) |
 | Toolchain | `scripts/bootstrap-toolchain.sh`, `rust-toolchain.toml` | Rust 1.99.1, NDK r27c, JDK 17, SDK 34 |
 
 `vendor/adblock-rust-ffi/` is a reference-only vendor of the archived Brave C
@@ -104,21 +107,45 @@ per document
     `addLists(replace=true)` rebuilds; on any failure the previous engine stays
     active.
 16. **Airplane mode** — all lists + resources are bundled assets; no network
-    needed for blocking (verified: 0.97 MiB shipped in the APK).
+    needed for blocking (verified: 1,191,228 B = 1.14 MiB of lists + resources
+    inside the APK; the 2 MiB cap has 0.86 MiB headroom).
 17. **Memory** — one engine, one WebView, 500-slot preallocated log, splash
     removed after ready, WebView destroyed in `onDestroy`.
 
-**Not yet handled (deferred):** SPA-route cosmetic re-application, ad-state
-watchdog, server-side ad injection detection, 24 h opportunistic list updates,
-settings screen / open-source screen, D-pad DOM focus traversal pass.
+**Still not implemented (deliberately, not silently):** server-side ad
+injection detection, D-pad DOM focus traversal pass inside the YouTube page
+(the app's own screens are D-pad navigable), and per-app telemetry-free
+diagnostics export.
 
-## Known limitation (not silently hidden)
+Previously listed here as "not handled" but now implemented:
+SPA-route cosmetic re-application (`PlayerActivity` `"url"` bridge message ->
+`applyCosmetic`), the ad-state watchdog, the 24 h opportunistic list updater,
+and the settings / open-source screens.
 
-`brave/adblock-resources/dist/resources.json` contains only 17 Brave-specific
-resources. The vendored uBO lists reference 109 scriptlet names that are not in
-that set (recorded in `assets/lists/SOURCES.json`). Those scriptlets cannot be
-injected by adblock-rust. The load-bearing `json-prune` /
-`trusted-replace-fetch-response` behaviour is implemented in our own
-document-start shim instead. A converter from uBO's ES-module
-`src/js/resources/scriptlets.js` (vendored under `assets/legal/`) is future
-work.
+## Scriptlet coverage (status changed 2026-11-11 → fixed)
+
+The original limitation — "`dist/resources.json` has only 17 Brave-specific
+resources, so 109 referenced `+js()` names are dropped" — **no longer applies**.
+`scripts/prune_lists.py` merges
+`scripts/build_ubo_resources.py` output (generated from the pinned
+`gorhill/uBlock` source with a pinned esbuild) into the bundled
+`assets/lists/resources.json`.
+
+Verified in this tree:
+
+```
+resources.json entries ............................ 98
+distinct +js() names referenced by shipped lists ... 89
+names with no matching resource entry .............. 0
+SOURCES.json unresolvedScriptletReferences ........ []
+SOURCES.json unresolvedRedirectReferences ......... []
+```
+
+`docs/SPEC-DEVIATIONS.md` §7b now carries a dated correction note; its prose is
+kept as the historical record of the gap.
+
+What the shim still owns: the load-bearing
+`json-prune` / `trusted-replace-fetch-response` behaviour for the
+`/youtubei/v1/player` response is implemented in `assets/js/shieldtube-shim.js`
+(document-start fetch/XHR patch), not delegated to a scriptlet.
+

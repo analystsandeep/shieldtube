@@ -17,11 +17,28 @@ https://github.com/<owner>/shieldtube
 ```
 
 The GPLv3 source offer must be reachable from the app. The in-app "Open source"
-screen is **[DEFERRED]** (lead priority change 2026-11-11); meanwhile
-`README.md`, this file, and `app/src/main/assets/legal/ubo-scriptlets.js`
-(upstream GPLv3 source, shipped verbatim in the APK) provide the attribution
-and source link. **Do not ship a public release until the Open source screen
-and the real SOURCE_URL are in place.**
+screen (`settings/OpenSourceActivity.kt`) now exists and shows the
+`BuildConfig.SOURCE_URL`, the component table and the GPLv3 text read from
+`assets/legal/LICENSE.txt`. **Do not ship a public release until the real
+`SOURCE_URL` replaces the placeholder** — the screen renders the placeholder in
+yellow and refuses to navigate.
+
+### What a RELEASE APK actually packages (measured 2026-11-12)
+
+| Asset | Release APK | Debug APK |
+|---|---|---|
+| `legal/LICENSE.txt` (GPLv3 text) | **yes** — read by OpenSourceActivity | yes |
+| `lists/**` (pruned lists + resources.json) | yes (1.14 MiB) — read by the engine | yes |
+| `js/**` (shim, cosmetic, watchdog) | yes — read at document start | yes |
+| `legal/ubo/**` + `legal/ubo-scriptlets.js` (verbatim uBO source, 643,659 B, 91 entries) | **no** | yes |
+
+`mergeReleaseAssets.doLast` in `app/build.gradle.kts` drops the verbatim uBO
+source tree from the release APK: no runtime code opens it, and GPLv3 §6 is
+satisfied by this repository, which is where it is actually useful. Measured
+effect: release APK 15,819,196 → **15,615,335 bytes** (−203,861). Debug APKs
+keep the tree so the packaged bytes can be diffed against
+`assets/legal/ubo/SHA256SUMS`. The scripts/ list-side corresponding source
+(`scripts/fetch-lists.sh` pins + `SOURCES.json`) is unchanged.
 
 ## What is bundled and under which licence
 
@@ -57,8 +74,10 @@ records the exact commit SHA, upstream path, upstream SHA-256 and licence for
 every one, so the "corresponding source" of a shipped list is reproducible via
 `scripts/fetch-lists.sh`.
 
-## In-app notices still to implement [DEFERRED]
+## In-app notices — status
 
-* "Open source" screen with the component table, licence texts and SOURCE_URL.
-* Per-list attribution and checksum display.
+* "Open source" screen: **implemented** (`settings/OpenSourceActivity.kt`) —
+  component table, GPLv3 text from assets, `BuildConfig.SOURCE_URL`.
+* Per-list attribution and checksum display: **still missing**; `SOURCES.json`
+  and `CHECKSUMS.sha256` ship in the APK but nothing renders them.
 * No telemetry, analytics or crash reporter is included (hard constraint).

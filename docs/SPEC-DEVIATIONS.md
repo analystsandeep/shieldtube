@@ -144,7 +144,25 @@ the lead) and settings exposes a UA override.
   (`FULL_TRUST`, `opts.permissions`) and `core/AdBlockEngine.kt`
   (`"trusted":true`).
 
-## 7b. Scriptlet resource gap (recorded, not hidden)
+## 7b. Scriptlet resource gap — FIXED 2026-11-11 (kept as history)
+
+> **Correction (2026-11-12).** This section describes a gap that has since been
+> closed. `scripts/prune_lists.py` invokes `scripts/build_ubo_resources.py`,
+> which generates function-style adblock-rust resources from the pinned
+> `gorhill/uBlock` source (pinned esbuild) and merges them into the bundled
+> `assets/lists/resources.json`. Re-measured on this tree:
+>
+> ```
+> resources.json entries ............................ 98
+> distinct +js() names referenced by shipped lists ... 89
+> names with no matching resource entry .............. 0
+> unresolvedScriptletReferences (SOURCES.json) ...... []
+> unresolvedRedirectReferences (SOURCES.json) ....... []
+> ```
+>
+> The prose below is retained verbatim because it records what was true when it
+> was written and why the shim exists; it is not the current state.
+
 
 `brave/adblock-resources/dist/resources.json` at pinned SHA
 `6da9b247c3368baa8b4f24cd02046e18702a6527` contains only **17** Brave-specific
@@ -181,9 +199,11 @@ Actions itself has not been runner-validated.
 ## 8. Remaining work per the 2026-11-11 priority change
 
 Settings screen, cosmetic layer, ad-state watchdog and in-app "Open source"
-screen come **after** the first `app-debug.apk` assembles. The CI workflow and
-instrumented smoke-test source now exist; only GitHub Actions runner validation
-and a real-device connected test remain. They are listed as TODOs in
+screen were deferred until the first `app-debug.apk` assembled; **all four are
+now implemented** (2026-11-12). The CI workflow and instrumented smoke-test
+source exist; GitHub Actions runner validation is in progress (run #1 failed on
+a bad `sdkmanager` path, fixed in commit `ff0ceba`) and the real-device
+connected test remains — see `docs/ON-DEVICE-TEST.md`. They are listed as TODOs in
 `README.md` and are not silently omitted.
 
 ## 9. Corrections that were ours, not the brief's

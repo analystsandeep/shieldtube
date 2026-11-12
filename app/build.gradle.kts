@@ -87,6 +87,24 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            // assets/legal/ubo/** is the verbatim GPLv3 corresponding source for
+            // the scriptlets baked into resources.json. No runtime code opens
+            // it (grep: the only assets.open() calls read js/*, lists/* and
+            // legal/LICENSE.txt), so it is 91 files / 643,659 B of dead weight
+            // in a release APK. GPLv3 section 6 is satisfied by the source
+            // repository, which is where this material is actually useful;
+            // OpenSourceActivity still reads legal/LICENSE.txt, so the licence
+            // text and its in-app attribution stay packaged. Debug builds keep
+            // the full tree so the shipped bytes can be diffed against
+            // SHA256SUMS.
+            //
+            // Excluding the verbatim GPLv3 uBO tree from release APKs is done
+            // by mergeReleaseAssets.doLast at the bottom of this file.
+            // Measured dead ends, kept so nobody repeats them:
+            //   packaging { assets { excludes += ... } }   -> compile error
+            //       "Line 101: assets { ^ Unresolved reference: assets"
+            //   packaging.resources.excludes += ...        -> compiles, but the
+            //       APK still contained all 90 assets/legal/ubo/ entries
             signingConfig = if (
                 !System.getenv("SHIELDTUBE_RELEASE_STORE_FILE").isNullOrBlank()
             ) {
@@ -145,4 +163,51 @@ tasks.withType<Test>().configureEach {
         listOf(hostLibDir.absolutePath, existing).filter { it.isNotEmpty() }
             .joinToString(File.pathSeparator)
     )
+}
+
+// Drop the verbatim GPLv3 uBO source tree from RELEASE APKs only.
+//
+// It is 91 files / 643,659 B and no runtime code opens it: the only
+// assets.open() calls in the app read js/*, lists/* and legal/LICENSE.txt.
+// GPLv3 section 6 is satisfied by the public source repository, which is where
+// this material is useful. Debug builds keep the tree so packaged bytes can be
+// diffed against SHA256SUMS.
+//
+// mergeReleaseAssets copies src/main/assets into
+// build/intermediates/assets/release/mergeReleaseAssets; compressReleaseAssets
+// packages that directory. So the delete runs INSIDE mergeReleaseAssets, after
+// its copy step - ordering alone is not enough, because nothing else clears a
+// stale output directory between builds.
+//
+// Measured dead ends (so nobody repeats them):
+//   packaging { assets { excludes += ... } }  -> compile error,
+//       "Line 101: assets { ^ Unresolved reference: assets"
+//   packaging.resources.excludes += ...       -> compiles, release APK still
+//       contained all 90 assets/legal/ubo/ entries
+//   tasks.named("packageReleaseAssets")       -> "Task with name
+//       'packageReleaseAssets' not found"; AGP 8.5.2 only has
+//       generate/merge/compress<Variant>Assets
+//
+// This mutates app/build/ only. app/src/main/assets/ is never touched.
+afterEvaluate {
+    tasks.named("mergeReleaseAssets").configure {
+        doLast {
+            val merged = layout.buildDirectory
+                .dir("intermediates/assets/release/mergeReleaseAssets")
+                .get().asFile
+            listOf("legal/ubo", "legal/ubo-scriptlets.js").forEach { rel ->
+                val target = File(merged, rel)
+                if (target.exists()) {
+                    val freed = target.walkTopDown().filter { it.isFile }
+                        .sumOf { it.length() }
+                    target.deleteRecursively()
+                    logger.lifecycle(
+                        "[shieldtube] release assets: dropped $rel " +
+                            "($freed bytes, GPLv3 source stays in the repo, " +
+                            "not in the release APK)"
+                    )
+                }
+            }
+        }
+    }
 }

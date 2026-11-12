@@ -12,6 +12,7 @@ import android.webkit.WebViewClient
 import io.shieldtube.core.AdBlockEngine
 import io.shieldtube.core.BlockLog
 import io.shieldtube.core.Prefs
+import io.shieldtube.core.RequestTypeMapper
 
 private const val TAG = "ShieldTube.WebViewClient"
 
@@ -46,12 +47,24 @@ class ShieldWebViewClient(
     ): WebResourceResponse? {
         val url = request?.url?.toString() ?: return null
         val sourceUrl = activity.currentUrl
-        val type = mapRequestType(request)
+        // WebView does not give us the uBO resource type; RequestTypeMapper
+        // derives it from Accept / extension / XHR marker. A wrong type creates
+        // false positives (a `$script` rule matching an image), so there is
+        // exactly ONE mapping in the app and both tests and production use it.
+        val type = RequestTypeMapper.map(request)
         if (AdBlockEngine.isBlocked(url, sourceUrl, type)) {
+            // BlockLog.record is the real API (BlockLog.kt). This call site said
+            // `BlockLog.add(...)`, which does not exist: every block on a real
+            // device threw NoSuchMethodError inside a WebView network callback.
+            // The instrumented BlockCounterSmokeTest asserted the counter goes
+            // up, so the smoke test could never have passed as written.
             val host = Uri.parse(url).host.orEmpty()
-            BlockLog.add(url, "$type→$host")
+            BlockLog.record(url, "$type→$host")
             Log.d(TAG, "BLOCK $type $url")
-            return WebResourceResponse("text/plain", "utf-8", null)
+            // Empty 200 with a caller-chosen MIME. null body == no body at all.
+            return WebResourceResponse(
+                RequestTypeMapper.mimeFor(url, type), null, null
+            )
         }
         return null
     }
@@ -123,27 +136,5 @@ class ShieldWebViewClient(
             Log.w(TAG, "main frame error: $code ${error?.description}")
         }
         super.onReceivedError(view, request, error)
-    }
-
-    private fun mapRequestType(request: WebResourceRequest): String {
-        val isMainFrame = request.isForMainFrame
-        val url = request.url.toString()
-        val path = Uri.parse(url).path.orEmpty()
-        val guessed = when {
-            isMainFrame -> "document"
-            url.contains("googlevideo.com") || url.contains("/videoplayback") -> "media"
-            path.endsWith(".js") || path.contains("/base.js") -> "script"
-            path.endsWith(".css") -> "stylesheet"
-            path.endsWith(".png") || path.endsWith(".jpg") ||
-                path.endsWith(".webp") || path.endsWith(".gif") -> "image"
-            path.endsWith(".woff") || path.endsWith(".woff2") ||
-                path.endsWith(".ttf") -> "font"
-            request.requestHeaders?.get("X-Requested-With") == "XMLHttpRequest" -> "xhr"
-            else -> "other"
-        }
-        // adblock-rust recognises: beacon, csp_report, document, font, image,
-        // imageset, media, object, object_subrequest, other, ping, script,
-        // stylesheet, subdocument, websocket, webtransport, xhr, xmlhttprequest.
-        return guessed
     }
 }

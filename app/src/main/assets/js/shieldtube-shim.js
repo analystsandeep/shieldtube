@@ -69,13 +69,40 @@
                 return response.text().then(function (body) {
                     var cleaned = scrubJson(body);
                     report('playerResponse', cleaned !== body ? 'scrubbed' : 'clean');
+                    if (cleaned === body) { return response; }
+                    // Building a bare `new Response(...)` throws away `url`,
+                    // `redirected` and `type`. The player reads response.url to
+                    // derive the video id, so the wrapper below copies every
+                    // observable field of the original response back on.
+                    var rebuilt;
                     try {
-                        return new Response(cleaned, {
+                        rebuilt = new Response(cleaned, {
                             status: response.status,
                             statusText: response.statusText,
                             headers: response.headers
                         });
-                    } catch (e) { return response; }
+                        try {
+                            Object.defineProperty(rebuilt, 'url',
+                                { value: response.url });
+                            Object.defineProperty(rebuilt, 'redirected',
+                                { value: response.redirected });
+                            Object.defineProperty(rebuilt, 'type',
+                                { value: response.type });
+                        } catch (e) { }
+                    } catch (e) {
+                        // Response() is not constructible in every engine.
+                        rebuilt = {
+                            ok: response.ok, status: response.status,
+                            statusText: response.statusText,
+                            headers: response.headers,
+                            url: response.url, redirected: response.redirected,
+                            type: response.type,
+                            text: function () { return Promise.resolve(cleaned); },
+                            json: function () { return Promise.resolve(JSON.parse(cleaned)); },
+                            clone: function () { return rebuilt; }
+                        };
+                    }
+                    return rebuilt;
                 });
             });
         };
@@ -124,6 +151,10 @@
     }
 
     // ---- ytInitialPlayerResponse: server-rendered initial state -------------
+    // The getter/setter pair alone is not enough: the page declares
+    // `var ytInitialPlayerResponse = ...`, and a later global declaration can
+    // shadow an accessor defined earlier. So the value is also re-scrubbed and
+    // re-installed as an OWN data property once the document has parsed.
     try {
         var initial = window.ytInitialPlayerResponse;
         Object.defineProperty(window, 'ytInitialPlayerResponse', {
@@ -131,13 +162,31 @@
             get: function () { return initial; },
             set: function (value) { clean(value); initial = value; }
         });
-        if (initial) { window.ytInitialPlayerResponse = initial; }
+        if (initial) { clean(initial); }
+
+        var reseal = function () {
+            var v = window.ytInitialPlayerResponse;
+            if (!v || typeof v !== 'object') { return; }
+            clean(v);
+            try {
+                Object.defineProperty(window, 'ytInitialPlayerResponse', {
+                    value: v, writable: true, configurable: true, enumerable: true
+                });
+            } catch (e) { }
+        };
+        window.addEventListener('DOMContentLoaded', reseal);
+        window.addEventListener('load', reseal);
     } catch (e) { /* property may be non-configurable; JS patch still covers it */ }
 
     // ---- Widevine probe: L3-only boxes cap at 720p; fail loudly -------------
     function probeWidevine() {
         try {
-            var video = document.createElement ? document.createElement('video') : null;
+            // DOCUMENT_START_SCRIPT runs before the document element exists, so
+            // `document` can be null here. The unguarded call threw, was caught
+            // by the outer catch, and every page reported a fabricated
+            // "probe-error" instead of the real Widevine verdict.
+            var doc = window.document;
+            var video = (doc && doc.createElement) ? doc.createElement('video') : null;
             var h264 = (video && typeof video.canPlayType === 'function')
                 ? video.canPlayType('video/mp4; codecs="avc1.42E01E"') : '';
             if (navigator.requestMediaKeySystemAccess) {

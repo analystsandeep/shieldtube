@@ -67,6 +67,11 @@ jobs:
       - name: Rust unit tests (step-1 gate)
         run: cargo test --manifest-path rust/Cargo.toml -- --nocapture
 
+      - name: Page-world JS harness (node, no deps)
+        run: |
+          node --version
+          node app/src/test/js/run.js
+
       - name: Verify vendored lists
         run: bash scripts/verify-checksums.sh app/src/main/assets/lists
 

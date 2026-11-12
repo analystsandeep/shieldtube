@@ -66,7 +66,18 @@
             if (url.indexOf(PLAYER) === -1) { return pending; }
             return pending.then(function (response) {
                 if (!response || typeof response.text !== 'function') { return response; }
-                return response.text().then(function (body) {
+                // Read the body from a CLONE, never from `response` itself.
+                // A Response body is single-use: calling response.text() marks
+                // the original as consumed, and when nothing needed scrubbing
+                // this code hands that same response back to the page. The
+                // player then calls response.json() and throws
+                // "Body is unusable: Body has already been read", which kills
+                // the /player call for every clean response. Measured in the
+                // node harness before this fix (see app/src/test/js/shim.test.js
+                // "clean response is still readable by the page").
+                var reader = response;
+                try { reader = response.clone(); } catch (e) { reader = response; }
+                return reader.text().then(function (body) {
                     var cleaned = scrubJson(body);
                     report('playerResponse', cleaned !== body ? 'scrubbed' : 'clean');
                     if (cleaned === body) { return response; }

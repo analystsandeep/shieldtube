@@ -106,20 +106,30 @@ source scripts/signing-env.example.sh   # edit the four variables first
 Verified: `apksigner verify` on `app-release.apk` →
 `Verifies`, v1 = true, v2 = true, 1 signer.
 
-## Verified build outputs (2026-11-11)
+## Verified build outputs (2026-11-11, refreshed after toolchain rebuild)
 
 ```
+cargo fmt --check .................. exit 0
+cargo clippy --all-targets -D warnings  exit 0
 cargo test ......................... 9 passed; 0 failed
-assembleDebug ...................... BUILD SUCCESSFUL in 57s
-assembleRelease .................... BUILD SUCCESSFUL in 38s
-testDebugUnitTest .................. BUILD SUCCESSFUL in 20s
+lintDebug .......................... BUILD SUCCESSFUL, 0 errors
+testDebugUnitTest .................. 2 passed; 0 failed
+assembleDebug + assembleRelease .... BUILD SUCCESSFUL in 1m 7s (same Gradle run)
 app/src/main/jniLibs/arm64-v8a/libshieldtube.so    4216248
 app/src/main/jniLibs/armeabi-v7a/libshieldtube.so  2990772
 app/src/main/jniLibs/x86/libshieldtube.so          3828336
 app/src/main/jniLibs/x86_64/libshieldtube.so       4042800
-app/build/outputs/apk/debug/app-debug.apk          17626527
-app/build/outputs/apk/release/app-release.apk      15522299
+apks/app-debug.apk                                17640988 (sha256 283f6da603220ffa9d436ad1970d6fb91a43063ed56775069f21e04a9b295a46)
+apks/app-release.apk                              15522295 (sha256 33a856d776695c4065498023d531cec1ab5a6a31e470a6d4d99a483ef8b5f70d)
 ```
+
+The `apks/` copies are snapshot-stable; the canonical Gradle outputs are
+`app/build/outputs/apk/debug/app-debug.apk` and
+`app/build/outputs/apk/release/app-release.apk`. In this ~2 GiB sandbox the
+Android gates were run with
+`./gradlew --no-daemon --max-workers=1 -Dorg.gradle.jvmargs=-Xmx768m` because a
+default Kotlin/Gradle daemon pair can thrash the host; GitHub-hosted runners
+use plain `./gradlew` as in `.github/workflows/ci.yml`.
 
 Known non-fatal build warning: `stripDebugDebugSymbols` reports "Unable to
 strip … libshieldtube.so" because AGP's default NDK path is not configured;
@@ -131,7 +141,7 @@ r27c dir to silence it.
 
 ```bash
 adb connect <tv-ip>:5555
-adb install -r app/build/outputs/apk/debug/app-debug.apk
+adb install -r apks/app-debug.apk
 adb logcat -s ShieldTube.Player ShieldTube.Client ShieldTube.Engine
 ./gradlew connectedDebugAndroidTest     # offline fixture smoke test
 ```

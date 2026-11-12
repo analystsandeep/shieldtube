@@ -8,4 +8,7 @@ if [[ "$DIR" = /* ]]; then ABS="$DIR"; else ABS="$REPO/$DIR"; fi
 cd "$ABS"
 [ -f CHECKSUMS.sha256 ] || { echo "missing CHECKSUMS.sha256" >&2; exit 1; }
 sha256sum --check CHECKSUMS.sha256
-echo "[shieldtube] all bundled list checksums verified"
+if [ -f ../legal/ubo/SHA256SUMS ]; then
+  (cd ../legal/ubo && sha256sum --check SHA256SUMS)
+fi
+echo "[shieldtube] all bundled list and uBO source checksums verified"

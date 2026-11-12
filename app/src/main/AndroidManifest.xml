@@ -45,6 +45,21 @@
             </intent-filter>
         </activity>
 
+        <activity
+            android:name=".settings.SettingsActivity"
+            android:configChanges="orientation|screenSize|keyboard|keyboardHidden|screenLayout|uiMode"
+            android:exported="false"
+            android:screenOrientation="landscape"
+            android:theme="@style/Theme.ShieldTube"
+            android:windowSoftInputMode="adjustResize" />
+
+        <activity
+            android:name=".settings.OpenSourceActivity"
+            android:configChanges="orientation|screenSize|keyboard|keyboardHidden|screenLayout|uiMode"
+            android:exported="false"
+            android:screenOrientation="landscape"
+            android:theme="@style/Theme.ShieldTube" />
+
     </application>
 
 </manifest>

@@ -44,6 +44,20 @@ android {
         versionName = "0.1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         ndk { abiFilters += abis }
+
+        // The public repository arrives tomorrow. Builders can set
+        // SHIELDTUBE_SOURCE_URL today; otherwise the in-app Open source screen
+        // shows a deliberately non-clickable placeholder.
+        val sourceUrl = System.getenv("SHIELDTUBE_SOURCE_URL")
+            ?.takeUnless { it.isBlank() }
+            ?.replace("\\", "\\\\")
+            ?.replace("\"", "\\\"")
+            ?: "PENDING_SOURCE_URL_REPLACE_BEFORE_PUBLIC_RELEASE"
+        buildConfigField("String", "SOURCE_URL", "\"$sourceUrl\"")
+    }
+
+    buildFeatures {
+        buildConfig = true
     }
 
     signingConfigs {

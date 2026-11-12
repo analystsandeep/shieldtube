@@ -6,6 +6,7 @@ import android.app.AlertDialog
 import android.content.Intent
 import android.content.pm.ActivityInfo
 import android.graphics.Color
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -22,7 +23,9 @@ import android.webkit.RenderProcessGoneDetail
 import android.webkit.WebChromeClient
 import android.webkit.WebSettings
 import android.webkit.WebView
+import android.widget.Button
 import android.widget.FrameLayout
+import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.webkit.WebViewCompat
@@ -30,13 +33,17 @@ import androidx.webkit.WebViewFeature
 import io.shieldtube.R
 import io.shieldtube.core.AdBlockEngine
 import io.shieldtube.core.BlockLog
+import io.shieldtube.core.CosmeticScript
 import io.shieldtube.core.InjectedScript
+import io.shieldtube.core.ListUpdater
 import io.shieldtube.core.Prefs
+import io.shieldtube.settings.SettingsActivity
 import org.json.JSONObject
 
 /**
- * Minimal player (lead priority change 2026-11-11). Deliberately excludes the
- * settings screen, cosmetic layer and ad-state watchdog until the APK builds.
+ * Full TV player: native ad blocking, document-start scriptlets, cosmetic
+ * filtering, a 500 ms watchdog, settings, activation notice and one-time ToS
+ * interstitial. No touchscreen is required; D-pad and media keys are handled.
  */
 class PlayerActivity : Activity() {
 
@@ -44,11 +51,12 @@ class PlayerActivity : Activity() {
     private lateinit var splash: TextView
     private lateinit var notice: TextView
     private var webView: WebView? = null
+    private var tosOverlay: View? = null
     private var documentStartScript: String = ""
     private var documentStartSupported = false
     private val main = Handler(Looper.getMainLooper())
 
-    /** Source URL for request matching; updated on every page finish. */
+    /** Source URL for request matching; updated on every page finish / SPA nav. */
     var currentUrl: String = Prefs.HOME_URL
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -91,6 +99,73 @@ class PlayerActivity : Activity() {
         )
 
         Log.i(TAG, "startup UA assertion (configured): ${Prefs.userAgent(this)}")
+        if (Prefs.tosAccepted(this)) startEngine() else showTosInterstitial()
+    }
+
+    private fun showTosInterstitial() {
+        val overlay = FrameLayout(this).apply {
+            setBackgroundColor(Color.parseColor("#E8000000"))
+            isClickable = true
+            isFocusable = false
+        }
+        val panel = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            setBackgroundColor(Color.parseColor("#DD111111"))
+            setPadding(64, 48, 64, 48)
+        }
+        val title = TextView(this).apply {
+            text = getString(R.string.tos_title)
+            setTextColor(Color.WHITE)
+            textSize = 26f
+            gravity = Gravity.CENTER
+        }
+        val body = TextView(this).apply {
+            text = getString(R.string.tos_body)
+            setTextColor(Color.LTGRAY)
+            textSize = 17f
+            gravity = Gravity.CENTER
+            setPadding(0, 24, 0, 32)
+        }
+        val accept = Button(this).apply {
+            text = getString(R.string.tos_accept)
+            isFocusable = true
+            isFocusableInTouchMode = false
+            isAllCaps = false
+            setTextColor(Color.WHITE)
+            setBackgroundColor(Color.parseColor("#333333"))
+            setPadding(32, 16, 32, 16)
+            setOnClickListener {
+                Prefs.setTosAccepted(this@PlayerActivity, true)
+                container.removeView(overlay)
+                tosOverlay = null
+                startEngine()
+            }
+        }
+        panel.addView(title, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
+        ))
+        panel.addView(body, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
+        ))
+        panel.addView(accept, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
+        ))
+        overlay.addView(panel, FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+            Gravity.CENTER
+        ))
+        container.addView(overlay, FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.MATCH_PARENT
+        ))
+        tosOverlay = overlay
+        accept.requestFocus()
+    }
+
+    private fun startEngine() {
+        if (isFinishing || isDestroyed) return
         AdBlockEngine.initializeAsync(this) { ok -> onEngineReady(ok) }
     }
 
@@ -106,9 +181,19 @@ class PlayerActivity : Activity() {
         currentUrl = target
         Log.i(TAG, "loading $target (engineReady=$ok)")
         webView?.loadUrl(target)
+
+        // Opportunistic 24 h update. Bundled lists remain active offline and
+        // on failure; no analytics or telemetry is involved.
+        ListUpdater.maybeUpdateAsync(applicationContext) { updated, message ->
+            Log.i(TAG, "list updater: $message")
+            if (updated && !isFinishing && !isDestroyed) {
+                showNotice(getString(R.string.lists_updated))
+            }
+        }
     }
 
     private fun createWebView() {
+        if (isFinishing || isDestroyed) return
         val wv = WebView(this)
         webView = wv
         container.addView(
@@ -126,9 +211,12 @@ class PlayerActivity : Activity() {
         wv.addJavascriptInterface(ShieldJsBridge(::handleBridgeMessage), "ShieldTubeNative")
 
         documentStartScript = InjectedScript.build(this)
+        // Direct check: Android lint only recognises the feature guard when the
+        // support test is itself the branch condition (a cached boolean cannot
+        // be proven to cover this call).
         documentStartSupported =
             WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)
-        if (documentStartSupported) {
+        if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
             // ONE script, registered once, BEFORE loadUrl. Origin rules must
             // include BOTH hosts or the shim silently no-ops.
             WebViewCompat.addDocumentStartJavaScript(wv, documentStartScript, ORIGINS)
@@ -193,6 +281,21 @@ class PlayerActivity : Activity() {
         view.evaluateJavascript(documentStartScript, null)
     }
 
+    /** Inject/replace cosmetic CSS + procedural actions for this URL. */
+    fun applyCosmetic(url: String?) {
+        if (url.isNullOrBlank() || isFinishing || isDestroyed) return
+        val wv = webView ?: return
+        if (!AdBlockEngine.isEnabled()) {
+            wv.evaluateJavascript(CosmeticScript.buildClear(), null)
+            return
+        }
+        AdBlockEngine.cosmeticAsync(this, url) { json ->
+            if (webView === wv && !isFinishing && !isDestroyed && AdBlockEngine.isEnabled()) {
+                wv.evaluateJavascript(CosmeticScript.build(this, json), null)
+            }
+        }
+    }
+
     private fun handleBridgeMessage(data: String?) {
         if (data.isNullOrBlank()) return
         try {
@@ -205,13 +308,37 @@ class PlayerActivity : Activity() {
                         detail.startsWith("probe-error")
                     ) {
                         main.post {
-                            showNotice("Widevine unavailable/L3: HD may cap at 720p or 480p")
+                            if (!isFinishing && !isDestroyed) {
+                                showNotice("Widevine unavailable/L3: HD may cap at 720p or 480p")
+                            }
                         }
                     }
                 }
                 "playerResponse", "playerResponseXhr" ->
                     Log.i(TAG, "player ad metadata: ${msg.optString("d")}")
                 "ready" -> Log.i(TAG, "shim ready, UA=${msg.optString("ua")}")
+                "watchdog" -> {
+                    val detail = msg.optString("d")
+                    Log.i(TAG, "500 ms watchdog: $detail")
+                    if (detail == "stalled") {
+                        main.post {
+                            if (!isFinishing && !isDestroyed) {
+                                showNotice(getString(R.string.watchdog_notice))
+                            }
+                        }
+                    }
+                }
+                "url" -> {
+                    val url = msg.optString("d")
+                    if (url.startsWith("http://") || url.startsWith("https://")) {
+                        main.post {
+                            if (!isFinishing && !isDestroyed) {
+                                currentUrl = url
+                                applyCosmetic(url)
+                            }
+                        }
+                    }
+                }
                 else -> Log.d(TAG, "bridge: $data")
             }
         } catch (e: Exception) {
@@ -220,9 +347,12 @@ class PlayerActivity : Activity() {
     }
 
     private fun showNotice(text: String) {
+        if (isFinishing || isDestroyed) return
         notice.text = text
         notice.visibility = View.VISIBLE
-        main.postDelayed({ notice.visibility = View.GONE }, 8000L)
+        main.postDelayed({
+            if (!isFinishing && !isDestroyed) notice.visibility = View.GONE
+        }, 8000L)
     }
 
     private fun showActivationNotice() {
@@ -231,6 +361,7 @@ class PlayerActivity : Activity() {
     }
 
     private fun confirmExternal(url: String) {
+        if (isFinishing || isDestroyed) return
         AlertDialog.Builder(this)
             .setTitle(R.string.external_link_blocked)
             .setMessage(url)
@@ -243,10 +374,18 @@ class PlayerActivity : Activity() {
         if (!url.isNullOrBlank()) currentUrl = url
         splash.visibility = View.GONE
         Log.i(TAG, "page finished: $currentUrl | blocks=${BlockLog.totalBlocked}")
+        applyCosmetic(url)
     }
 
     fun onRenderProcessGone(_view: WebView?, detail: RenderProcessGoneDetail?): Boolean {
-        Log.w(TAG, "renderer gone (crash=${detail?.didCrash()}); recreating WebView")
+        // The callback itself only exists on API 26+, but didCrash() is also an
+        // API 26 method: keep the minSdk 23 code path free of that reference.
+        val crashed = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            detail?.didCrash()?.toString() ?: "unknown"
+        } else {
+            "unavailable-before-api-26"
+        }
+        Log.w(TAG, "renderer gone (crash=$crashed, webView=${_view != null}); recreating WebView")
         main.post {
             if (isFinishing || isDestroyed) return@post
             webView?.let {
@@ -270,9 +409,34 @@ class PlayerActivity : Activity() {
         }
     }
 
+    @Suppress("DEPRECATION")
+    private fun openSettings() {
+        startActivityForResult(Intent(this, SettingsActivity::class.java), REQ_SETTINGS)
+    }
+
+    @Suppress("DEPRECATION")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == REQ_SETTINGS && resultCode == RESULT_OK) {
+            Log.i(TAG, "settings changed; recreating player")
+            recreate()
+        }
+    }
+
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (tosOverlay != null) {
+            if (event.action == KeyEvent.ACTION_DOWN && event.keyCode == KeyEvent.KEYCODE_BACK) {
+                finish()
+                return true
+            }
+            return super.dispatchKeyEvent(event)
+        }
         if (event.action == KeyEvent.ACTION_DOWN) {
             when (event.keyCode) {
+                KeyEvent.KEYCODE_MENU -> {
+                    openSettings()
+                    return true
+                }
                 KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> {
                     evalMedia("toggle")
                     return true
@@ -353,6 +517,7 @@ class PlayerActivity : Activity() {
 
     companion object {
         private const val TAG = "ShieldTube.Player"
+        private const val REQ_SETTINGS = 1001
         const val EXTRA_TEST_URL = "shieldtube.test.url"
         private val ORIGINS = setOf("https://www.youtube.com", "https://m.youtube.com")
     }

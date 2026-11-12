@@ -8,4 +8,44 @@
     <string name="renderer_restarted">Video renderer restarted after a crash</string>
     <string name="activation_required">Sign in at youtube.com/activate</string>
     <string name="external_link_blocked">External link blocked</string>
+
+    <string name="settings_title">ShieldTube settings</string>
+    <string name="open_settings">Settings</string>
+    <string name="shields_on">Shields: ON (press to disable)</string>
+    <string name="shields_off">Shields: OFF (press to enable)</string>
+    <string name="mobile_on">Mobile YouTube fallback: ON</string>
+    <string name="mobile_off">Mobile YouTube fallback: OFF (uses /tv)</string>
+    <string name="ua_hint">User agent override (blank = pinned Cobalt/25)</string>
+    <string name="save_ua">Save user agent</string>
+    <string name="reset_ua">Reset to Cobalt/25</string>
+    <string name="update_lists">Update filter lists now</string>
+    <string name="updating_lists">Updating filter lists…</string>
+    <string name="lists_updated">Filter lists updated</string>
+    <string name="clear_data">Clear cookies, data and settings</string>
+    <string name="open_source">Open source &amp; licenses</string>
+    <string name="stock_youtube_app_info">Open stock YouTube app info</string>
+    <string name="back_to_player">Back to player</string>
+    <string name="activation_notice">Sign-in uses youtube.com/activate. This app never opens Google OAuth inside the WebView.</string>
+    <string name="counters">Blocked requests: %1$d | recent entries: %2$d / 500</string>
+    <string name="last_update">Last list update: %1$s | sha256 %2$s</string>
+    <string name="never">never</string>
+    <string name="bundled_baseline">bundled</string>
+    <string name="update_status">Bundled lists are always available offline.</string>
+    <string name="settings_changed">Settings changed; restarting player</string>
+    <string name="clear_data_confirm">Clear cookies, WebView storage, downloaded lists and all settings? This signs you out.</string>
+    <string name="stock_youtube_missing">Stock YouTube app is not installed on this TV box</string>
+
+    <string name="tos_title">Before you continue</string>
+    <string name="tos_body">ShieldTube plays the YouTube TV web app in a local WebView and blocks ads on this device only. By continuing you agree to YouTube’s Terms of Service; this app does not bypass paid content, DRM, or account restrictions. No telemetry or analytics is sent by default.</string>
+    <string name="tos_accept">I understand — continue</string>
+
+    <string name="open_source_title">Open source</string>
+    <string name="source_url_label">Source repository</string>
+    <string name="source_url_pending">Pending: %1$s. Replace SHIELDTUBE_SOURCE_URL before publishing.</string>
+    <string name="view_source">Open source repository</string>
+    <string name="open_source_body">ShieldTube is GPL-3.0-or-later. adblock-rust and Brave lists are MPL-2.0; uBlock Origin scriptlets and lists are GPL-3.0. The complete corresponding uBO source is bundled under assets/legal/ubo/. See docs/LICENSING.md.</string>
+    <string name="license_title">GNU General Public License v3</string>
+    <string name="source_link_unavailable">Source URL is still pending; see docs/LICENSING.md</string>
+
+    <string name="watchdog_notice">Playback watchdog reported a stalled ad segment</string>
 </resources>

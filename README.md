@@ -6,21 +6,25 @@ at `youtube.com/tv` plus an on-device adblock engine (Rust / `adblock-rust`),
 document-start scriptlets, cosmetic filtering and an ad-state watchdog. No
 proxy, no VPN, no DNS trick, no backend, no telemetry.
 
-**Status (2026-11-11):** step 1 + minimal player complete. Rust engine, C + JNI
-ABI, cbindgen header, 9 passing Rust tests, 2 passing JVM/JNI tests, four ABI
-`cdylib`s, and both `assembleDebug` and `assembleRelease` green (release APK
-verified with `apksigner`). Settings / cosmetic / watchdog are deferred per the
-project lead's priority change; the CI workflow file is present but has not been
-run on GitHub Actions yet.
+**Status (2026-11-11, refreshed after toolchain rebuild):** step 1 + minimal
+player complete. `cargo fmt`, `cargo clippy -D warnings`, 9 Rust tests, 2
+JVM/JNI tests, bundled-list checksums, four Rust `cdylib`s, `lintDebug` (0
+errors), `assembleDebug`, `assembleRelease` and `apksigner verify` are all green.
+The GitHub Actions workflow is written and its local equivalents pass, but it
+has not been runner-validated. Settings / cosmetic layer / watchdog / in-app
+"Open source" screen remain deferred per the project lead's priority change.
 
-Verified outputs:
-`app/build/outputs/apk/debug/app-debug.apk`,
+Verified outputs (regenerated in this sandbox, not distributable):
+`apks/app-debug.apk` (17,640,988 B) and
+`apks/app-release.apk` (15,522,295 B, debug-signed). Their canonical Gradle
+outputs are `app/build/outputs/apk/debug/app-debug.apk` and
 `app/build/outputs/apk/release/app-release.apk`.
 
 > Sandbox note: `.git/`, `.cache/` (toolchain) and `app/build/` are excluded from
 > workspace snapshots, so after a turn boundary the toolchain and APK must be
 > regenerated with `scripts/bootstrap-toolchain.sh` and `./gradlew assembleDebug`.
-> A real git clone keeps the executable bit on `gradlew`.
+> The `apks/` copies are kept outside `app/build/` so they remain downloadable;
+> a real git clone keeps the executable bit on `gradlew`.
 
 ## Sign-in (read this first)
 
@@ -61,12 +65,15 @@ GPL-3.0-or-later for our code. `adblock-rust` is **MPL-2.0** (not MIT),
 `brave/adblock-lists` is MPL-2.0, uBlock Origin's lists and scriptlets are
 GPL-3.0. Vendored MPL files keep their MPL headers. See `docs/LICENSING.md`.
 
-## Deferred (lead priority change, 2026-11-11)
+## Remaining work (lead priority change, 2026-11-11)
 
 - Settings screen (Shields toggle, list update, UA override, counters, open
   source, clear data) — including the user-facing activation-flow notice.
 - Cosmetic layer and ad-state watchdog (the document-start shim and network
   blocking land with the minimal player).
-- GitHub Actions CI (lint, unit test, four ABIs, APK artifact) after the first APK.
-- Instrumented smoke test.
+- In-app "Open source" screen; `docs/LICENSING.md` still contains a
+  `SOURCE_URL` placeholder that must be replaced before public distribution.
+- Generic uBO scriptlet coverage (`docs/SPEC-DEVIATIONS.md` §7b).
+- GitHub Actions runner validation (the workflow and local gates exist).
+- Connected instrumented smoke test on real hardware (the test source exists).
 - Real-device §9 acceptance run (lead confirmed a real ARM TV box is available).

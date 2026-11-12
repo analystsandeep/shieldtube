@@ -81,7 +81,8 @@ python3 "$REPO/scripts/prune_lists.py" \
   --raw "$RAW" \
   --out "$OUT" \
   --legal "$LEGAL" \
-  --previous "$OUT/SOURCES.json"
+  --previous "$OUT/SOURCES.json" \
+  --work "$WORK/ubo"
 
 echo "[shieldtube] verifying checksums"
 bash "$REPO/scripts/verify-checksums.sh" "$OUT"

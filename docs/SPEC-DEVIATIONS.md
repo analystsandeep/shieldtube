@@ -163,10 +163,27 @@ verbatim under `assets/legal/`, GPLv3 source compliance) is future work.
 The old-format `assemble_scriptlet_resources()` in adblock-rust is
 `#[deprecated]` and cannot parse current uBO ES modules, so it is not used.
 
-## 8. Deferred per the 2026-11-11 priority change
+## 7c. CI gates caught a real minSdk-23 bug (2026-11-11)
 
-Settings screen, cosmetic layer, ad-state watchdog, and CI workflow come
-**after** the first `app-debug.apk` assembles. They are listed as TODOs in
+The first local `lintDebug` after the toolchain rebuild failed with exactly one
+error: `PlayerActivity.kt:249: Call requires API level 26 (current min is 23):
+android.webkit.RenderProcessGoneDetail#didCrash [NewApi]`. The renderer-gone
+callback itself only fires on API 26+, but its `detail.didCrash()` call was
+unguarded. This was fixed with an explicit `Build.VERSION.SDK_INT >= O` check,
+not with a lint suppression or a minSdk change. The existing
+`WebViewFeature.DOCUMENT_START_SCRIPT` guard was also made directly visible to
+lint's `RequiresFeature` analysis. Re-running `lintDebug` produced **0 errors**.
+The full local CI sequence (`cargo fmt --check`, `cargo clippy -D warnings`,
+`cargo test`, checksum verification, four-ABI Rust build, `lintDebug`,
+`testDebugUnitTest`, both APK builds, `apksigner verify`) is green. GitHub
+Actions itself has not been runner-validated.
+
+## 8. Remaining work per the 2026-11-11 priority change
+
+Settings screen, cosmetic layer, ad-state watchdog and in-app "Open source"
+screen come **after** the first `app-debug.apk` assembles. The CI workflow and
+instrumented smoke-test source now exist; only GitHub Actions runner validation
+and a real-device connected test remain. They are listed as TODOs in
 `README.md` and are not silently omitted.
 
 ## 9. Corrections that were ours, not the brief's

@@ -5,6 +5,11 @@
 Language policy (lead decision 2026-11-11): English + language-agnostic rules
 only. Rules containing non-ASCII text are regional/localised rules and are
 dropped. Regional source files are never fetched in the first place.
+
+The uBO scriptlet-coverage gap (docs/SPEC-DEVIATIONS.md §7b) is closed here:
+scripts/build_ubo_resources.py generates function-style adblock-rust resources
+from the pinned uBO source, and the resulting records are merged into the
+bundled resources.json.
 """
 
 from __future__ import annotations
@@ -13,6 +18,7 @@ import argparse
 import hashlib
 import json
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -74,41 +80,69 @@ def prune(text: str) -> list[str]:
     return out
 
 
-def resource_references(lines: list[str]) -> set[str]:
+def scriptlet_references(lines: list[str]) -> set[str]:
     refs: set[str] = set()
     for line in lines:
-        for m in re.finditer(r"\+js\(\s*([^,\s\)]+)", line):
-            refs.add(m.group(1).strip().strip("'\""))
-        for m in re.finditer(r"redirect(?:-rule)?=([^,\s]+)", line):
-            refs.add(m.group(1).strip())
+        for m in re.finditer(r"\+js\(\s*([^,\s\)\"']+)", line):
+            ref = m.group(1).strip().strip("'\"`")
+            if ref and ref != ")":
+                refs.add(ref)
     return refs
 
 
-def prune_resources(data: list[dict], refs: set[str]) -> list[dict]:
-    by_name = {r["name"]: r for r in data}
+def redirect_references(lines: list[str]) -> set[str]:
+    refs: set[str] = set()
+    for line in lines:
+        # Network modifiers start at `$` or a comma, never in the middle of a
+        # scriptlet argument such as `!?safelink_redirect=)`.
+        for m in re.finditer(r"(?:^|[$,\s])redirect(?:-rule)?=([^,\s]+)", line):
+            ref = m.group(1).strip().rstrip(")")
+            if ref and ref != ")":
+                refs.add(ref)
+    return refs
 
-    def aliases(r: dict) -> set[str]:
-        names = {r["name"], *r.get("aliases", [])}
-        return {n for n in list(names) for n in (n, n.removesuffix(".js"))}
 
-    selected: set[str] = set()
-    queue: list[str] = []
-    for r in data:
-        if aliases(r) & refs or any(x in refs for x in aliases(r)):
-            selected.add(r["name"])
-            queue.append(r["name"])
-    # Resolve dependencies transitively (canonical names only).
-    while queue:
-        name = queue.pop()
-        r = by_name.get(name)
-        if r is None:
-            continue
-        for dep in r.get("dependencies", []):
-            dep = dep if dep in by_name else dep + ".js"
-            if dep in by_name and dep not in selected:
-                selected.add(dep)
-                queue.append(dep)
-    return [r for r in data if r["name"] in selected]
+def strip_js(name: str) -> str:
+    return name[:-3] if name.endswith(".js") else name
+
+
+def merge_resources(brave: list[dict], generated: list[dict]) -> list[dict]:
+    by_name = {r["name"]: dict(r) for r in brave}
+    for r in generated:
+        name = r["name"]
+        if name in by_name:
+            merged = by_name[name]
+            merged["aliases"] = sorted(set(merged.get("aliases", []) + r.get("aliases", [])))
+            merged["dependencies"] = sorted(set(merged.get("dependencies", []) + r.get("dependencies", [])))
+            if r.get("permission") is not None:
+                merged["permission"] = max(merged.get("permission", 0), r["permission"])
+        else:
+            by_name[name] = dict(r)
+    names = set(by_name)
+    for r in by_name.values():
+        r["aliases"] = sorted({
+            a for a in r.get("aliases", []) if a and a != r["name"] and a not in names
+        })
+        if not r.get("dependencies"):
+            r.pop("dependencies", None)
+        if r.get("permission") in (None, 0):
+            r.pop("permission", None)
+    return sorted(by_name.values(), key=lambda r: r["name"])
+
+
+def present_names(resources: list[dict]) -> set[str]:
+    present: set[str] = set()
+    for r in resources:
+        for n in [r["name"], *r.get("aliases", [])]:
+            present.add(n)
+            present.add(strip_js(n))
+    return present
+
+
+def is_present(ref: str, present: set[str]) -> bool:
+    base = re.sub(r":\d+$", "", ref)
+    candidates = {ref, base, ref + ".js", strip_js(ref), strip_js(base)}
+    return any(c in present for c in candidates)
 
 
 def main() -> int:
@@ -117,7 +151,14 @@ def main() -> int:
     ap.add_argument("--out", required=True, type=Path)
     ap.add_argument("--legal", required=True, type=Path)
     ap.add_argument("--previous", required=True, type=Path)
+    ap.add_argument("--work", required=False, type=Path)
     args = ap.parse_args()
+
+    repo = Path(__file__).resolve().parent.parent
+    work = args.work or args.raw.parent / "ubo"
+    work.mkdir(parents=True, exist_ok=True)
+    source_dir = args.legal / "ubo"
+    source_dir.mkdir(parents=True, exist_ok=True)
 
     sources = json.loads((args.raw / "sources.json").read_text())
     args.out.mkdir(parents=True, exist_ok=True)
@@ -160,34 +201,51 @@ def main() -> int:
         outputs[out_name] = (HEADER + "\n".join(lines) + "\n").encode()
         print(f"[prune] -> {out_name:32s} {len(lines):6d} rules, {len(outputs[out_name]):8d} bytes")
 
-    resources = json.loads(raw_bytes["resources.json"].decode())
-    refs = resource_references(all_kept)
-    # Brave's dist/resources.json holds only Brave-specific resources. The
-    # pruned uBO lists reference many uBO scriptlets that are NOT in that set.
-    # Keep the whole (small) resource library so any of those that do exist can
-    # be injected, and record the unresolved names instead of silently dropping
-    # them. Our own document-start shim implements the load-bearing
-    # json-prune / trusted-replace-fetch-response behaviour in JS.
-    present: set[str] = set()
-    for r in resources:
-        for n in [r["name"], *r.get("aliases", [])]:
-            present.add(n)
-            present.add(n.removesuffix(".js"))
-    unresolved = sorted(refs - present)
-    kept_resources = sorted(resources, key=lambda r: r["name"])
+    scriptlet_refs = sorted(scriptlet_references(all_kept))
+    redirect_refs = sorted(redirect_references(all_kept))
+    refs_path = work / "refs.json"
+    refs_path.write_text(json.dumps(
+        {"scriptlets": scriptlet_refs, "redirects": redirect_refs},
+        indent=2, sort_keys=True,
+    ) + "\n", encoding="utf-8")
+
+    generated_path = work / "ubo-generated-resources.json"
+    metadata_path = work / "ubo-metadata.json"
+    build_script = repo / "scripts" / "build_ubo_resources.py"
+    subprocess.run([
+        sys.executable, str(build_script),
+        "--source-dir", str(source_dir),
+        "--work", str(work),
+        "--refs", str(refs_path),
+        "--out", str(generated_path),
+        "--metadata-out", str(metadata_path),
+    ], check=True, cwd=repo)
+    ubo_metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    generated = json.loads(generated_path.read_text(encoding="utf-8"))
+    brave_resources = json.loads(raw_bytes["resources.json"].decode())
+    resources = merge_resources(brave_resources, generated)
     outputs["resources.json"] = (
-        json.dumps(kept_resources, sort_keys=True, separators=(",", ":")) + "\n"
+        json.dumps(resources, sort_keys=True, separators=(",", ":")) + "\n"
     ).encode()
+
+    present = present_names(resources)
+    unresolved_scriptlets = sorted(r for r in scriptlet_refs if not is_present(r, present))
+    unresolved_redirects = sorted(r for r in redirect_refs if not is_present(r, present))
     print(
-        f"[prune] -> resources.json              {len(kept_resources):6d} resources, "
-        f"{len(outputs['resources.json'])} bytes, {len(unresolved)} unresolved uBO scriptlet refs"
+        f"[prune] -> resources.json              {len(resources):6d} resources, "
+        f"{len(outputs['resources.json'])} bytes, "
+        f"{len(unresolved_scriptlets)} unresolved scriptlets, "
+        f"{len(unresolved_redirects)} unresolved redirects"
     )
 
-    # GPLv3 source availability: ship the upstream scriptlets source verbatim.
-    legal_bytes = raw_bytes["ubo-scriptlets.js"]
-    (args.legal / "ubo-scriptlets.js").write_bytes(legal_bytes)
+    # The old single-file legal copy is superseded by the complete uBO tree.
+    old_legal = args.legal / "ubo-scriptlets.js"
+    if old_legal.exists():
+        old_legal.unlink()
 
-    total = sum(len(v) for v in outputs.values()) + len(legal_bytes)
+    legal_files = sorted(p for p in args.legal.rglob("*") if p.is_file())
+    legal_bytes = sum(p.stat().st_size for p in legal_files)
+    total = sum(len(v) for v in outputs.values()) + legal_bytes
     if total > MAX_TOTAL_BYTES:
         print(f"[prune] FATAL: {total} bytes exceeds 2 MB cap", file=sys.stderr)
         return 3
@@ -195,22 +253,31 @@ def main() -> int:
     for name, data in outputs.items():
         (args.out / name).write_bytes(data)
 
+    ubo_manifest = source_dir / "SHA256SUMS"
     checksums = "".join(
         f"{sha256(data)}  {name}\n" for name, data in sorted(outputs.items())
     )
-    checksums += f"{sha256(legal_bytes)}  ../legal/ubo-scriptlets.js\n"
+    checksums += f"{sha256(ubo_manifest.read_bytes())}  ../legal/ubo/SHA256SUMS\n"
     (args.out / "CHECKSUMS.sha256").write_text(checksums)
 
     manifest = {
-        "schema": 1,
+        "schema": 2,
         "languages": ["en", "generic"],
         "totalBytes": total,
         "capBytes": MAX_TOTAL_BYTES,
-        "unresolvedScriptletReferences": unresolved,
+        "scriptletReferences": len(scriptlet_refs),
+        "redirectReferences": len(redirect_refs),
+        "unresolvedScriptletReferences": unresolved_scriptlets,
+        "unresolvedRedirectReferences": unresolved_redirects,
+        "uboSource": ubo_metadata,
         "note": (
-            "Brave dist/resources.json contains only Brave-specific resources; "
-            "uBO scriptlet names referenced by the vendored lists are resolved "
-            "by the app's own document-start shim, not by adblock-rust."
+            "All uBO +js() and redirect references resolve to resources generated "
+            "from the pinned gorhill/uBlock source by esbuild; the complete GPLv3 "
+            "corresponding source is bundled under assets/legal/ubo/."
+            if not unresolved_scriptlets and not unresolved_redirects else
+            "Some uBO references remain unresolved; see unresolvedScriptletReferences "
+            "and unresolvedRedirectReferences. The complete GPLv3 corresponding "
+            "source is bundled under assets/legal/ubo/."
         ),
         "inputs": sources,
         "outputs": [
@@ -219,9 +286,10 @@ def main() -> int:
         ],
         "legal": [
             {
-                "file": "app/src/main/assets/legal/ubo-scriptlets.js",
-                "sha256": sha256(legal_bytes),
-                "bytes": len(legal_bytes),
+                "file": "app/src/main/assets/legal/ubo",
+                "sha256": sha256(ubo_manifest.read_bytes()),
+                "files": ubo_metadata["sourceFiles"],
+                "bytes": legal_bytes,
             }
         ],
     }

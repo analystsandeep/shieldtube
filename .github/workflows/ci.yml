@@ -27,7 +27,25 @@ jobs:
 
       - name: Install NDK r27c
         run: |
-          echo "y" | $ANDROID_HOME/sdkmanager --install "ndk;27.0.12077973"
+          # sdkmanager is NOT at $ANDROID_HOME/sdkmanager on a GitHub runner
+          # (or in any standard Android SDK layout). Run #1 died with
+          #   /usr/local/lib/android/sdk/sdkmanager: No such file or directory
+          #   ##[error]Process completed with exit code 127.
+          # It lives in cmdline-tools/<latest|version>/bin/sdkmanager. Resolve
+          # it instead of hard-coding, print the version, and fail with a clear
+          # message if the layout changes again.
+          SDKM=$(command -v sdkmanager || true)
+          if [ -z "$SDKM" ]; then
+            SDKM=$(ls "$ANDROID_HOME"/cmdline-tools/*/bin/sdkmanager 2>/dev/null | head -1)
+          fi
+          if [ -z "$SDKM" ]; then
+            echo "::error::sdkmanager not found (PATH or $ANDROID_HOME/cmdline-tools/*/bin/)"
+            ls -la "$ANDROID_HOME" "$ANDROID_HOME"/cmdline-tools || true
+            exit 1
+          fi
+          echo "using sdkmanager: $SDKM"
+          "$SDKM" --version
+          yes | "$SDKM" --install "ndk;27.0.12077973"
           echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/27.0.12077973" >> "$GITHUB_ENV"
 
       - name: Rust 1.99.1 + Android targets

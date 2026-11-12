@@ -174,6 +174,46 @@ the `.so` files are packaged unstripped. They are already `strip =
 "debuginfo"` in Cargo, so the APK cost is small. Set `android.ndkPath` to the
 r27c dir to silence it.
 
+## Robolectric: measured, and deliberately not adopted (2026-11-12)
+
+The standing constraint was "Robolectric only if it actually builds in 1.9 GB
+*and* adds demonstrable value". Both clauses were tested rather than assumed.
+
+**It builds.** `org.robolectric:robolectric:4.13` added as a
+`testImplementation`, `./gradlew testDebugUnitTest` completed in 44 s on this
+1.9 GB sandbox with `-Xmx900m --max-workers=1`, peak availability never under
+1.2 GB. A `RobolectricTestRunner` probe reported `RuntimeEnvironment.getApiLevel()
+= 21`. So the first clause passes.
+
+**It adds value for exactly one thing.** Native calls genuinely work under it:
+
+    AdBlockBridge.nativeCreate(payload)          -> non-zero handle
+    nativeCheckRequest(h, doubleclick.net, ..., "script") -> true
+    nativeCheckRequest(h, i.ytimg.com, ..., "image")      -> false
+
+That is real JNI through the real `cdylib`, and it duplicates what
+`rust/tests/engine_tests.rs` already proves on the Rust side and what
+`AdBlockBridgeJniTest` already exercises on the JVM side.
+
+**It adds nothing for the thing that matters most.** `WebView.evaluateJavascript`
+under Robolectric is a silent no-op:
+
+    wv.evaluateJavascript("(function(){ return 'EXECUTED'; })()") { ... }
+    callback fired: false
+    callback value: null
+
+No exception, no execution. Every page-world behaviour this project cares about
+-- the shim's scrubbing, the watchdog's seek, the cosmetic layer's procedural
+actions -- lives in JavaScript inside the WebView, and Robolectric cannot run a
+line of it. Those are covered instead by `app/src/test/js/` (86 assertions, plain
+node) and, for true fidelity, by the on-device steps in
+`docs/ON-DEVICE-TEST.md`.
+
+**Decision: not adopted.** Adding a heavyweight test framework whose only new
+capability is a duplicate of existing coverage, while the gap it appears to fill
+is still a gap, would be cargo cult. The probe edits were reverted; the build
+file and test tree are unchanged.
+
 ## Real-device testing (lead confirmed a real ARM TV box)
 
 The step-by-step, observable pass/fail checklist lives in

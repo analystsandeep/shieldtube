@@ -84,6 +84,9 @@ jobs:
       - name: Build APKs
         run: ./gradlew assembleDebug assembleRelease
 
+      - name: Artifact audits (permissions, exported components, delta)
+        run: bash scripts/audit-apks.sh
+
       - name: Verify release signature
         run: |
           "$ANDROID_HOME/build-tools/34.0.0/apksigner" verify \

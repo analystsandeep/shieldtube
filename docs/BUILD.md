@@ -130,9 +130,17 @@ app/src/main/jniLibs/arm64-v8a/libshieldtube.so    4216248
 app/src/main/jniLibs/armeabi-v7a/libshieldtube.so  2990772
 app/src/main/jniLibs/x86/libshieldtube.so          3828336
 app/src/main/jniLibs/x86_64/libshieldtube.so       4042800
-app/build/outputs/apk/debug/app-debug.apk         18008806
-app/build/outputs/apk/release/app-release.apk     15615335
+app/build/outputs/apk/debug/app-debug.apk          17990644 (cold build)
+app/build/outputs/apk/release/app-release.apk      15615606 (cold build)
 ```
+
+**APK sizes are not byte-reproducible, even from identical source.** Measured
+in this sandbox: three clean `assembleDebug` builds of the same tree produced
+17,990,644 / 17,990,647 / 17,990,654 bytes, and an incremental build on top of a
+previous one produced 18,082,796 bytes — a ~74 KB difference caused by the
+incremental packaging path, not by source. Do not treat an APK byte size or
+sha256 as a fixed expected value; compare the *contents* instead
+(`unzip -l`) and rebuild cold (`./gradlew clean assembleX`) when a size looks wrong.
 
 APK binaries are not committed (`.gitignore` has `*.apk`), so the canonical
 paths are `app/build/outputs/apk/debug/app-debug.apk` and

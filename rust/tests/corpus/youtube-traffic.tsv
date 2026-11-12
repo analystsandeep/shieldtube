@@ -1,0 +1,74 @@
+# ShieldTube traffic corpus
+#
+# PROVENANCE: every URL below is SYNTHESIZED for this test corpus. None were
+# captured from a real device, a real session, or a packet trace. They are
+# constructed from the documented shape of YouTube's own endpoints and from the
+# hostnames that appear in the bundled filter lists. Do not present this file as
+# measured traffic; docs/ON-DEVICE-TEST.md section "Live traffic" is where real
+# traffic is checked, on hardware, by the user.
+#
+# Format: one record per line,
+#   <class>\t<expected>\t<request_type>\t<url>
+#   (a literal backslash-t separates the fields)
+#
+# class      groups the URL for reporting
+# expected   block | allow   -- what the engine MUST answer
+# type       request type string passed to check_request
+#
+# Rules used by the test: app/src/main/assets/lists/*.txt as shipped, loaded
+# through the same create() path the app uses.
+
+# --- ADS: ad serving hosts, expected to be blocked ------------------------
+ads	block	script	https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js
+ads	block	script	https://pagead2.googlesyndication.com/pagead/js/r20240101/r20190131/show_ads_impl_fy2021.js
+ads	block	image	https://pagead2.googlesyndication.com/pagead/gen_204?id=xbid&dbm_b=AKAmf
+ads	block	subdocument	https://googleads.g.doubleclick.net/pagead/ads?client=ca-pub-1234567890&output=html
+ads	block	script	https://static.doubleclick.net/instream/ad_status.js
+ads	block	image	https://securepubads.g.doubleclick.net/tag/js/gpt.js
+# MEASURED GAP (not an aspiration): the shipped pruned list set contains no
+# rule that covers youtube.com/api/stats/ads, so the engine allows it. Recorded
+# as `allow` because this corpus pins what the app DOES, and the gap is listed
+# in EVIDENCE-4.md as a finding for the lead rather than silently "fixed" by
+# adding a rule nobody asked for.
+ads	allow	xmlhttprequest	https://www.youtube.com/api/stats/ads?ns=1&event=2&device=1
+ads	block	script	https://www.youtube.com/pagead/js/adsbygoogle.js
+ads	block	image	https://www.youtube.com/pagead/viewthroughconversion/123456789/?random=1
+# Only a badfilter'd POST-only variant exists in the shipped set, so this GET is
+# allowed. Measured gap, same treatment as above.
+ads	allow	xmlhttprequest	https://www.youtube.com/api/stats/atr?c=WEB&v=1
+# ytimg.com is first-party asset hosting; no shipped rule touches it and the
+# first-party allow-list would protect the asset paths anyway. Allowed on
+# purpose: blocking ytimg wholesale would break thumbnails.
+ads	allow	image	https://i.ytimg.com/gen_204?data=abc
+ads	block	script	https://adservice.google.com/adsid/integrator.js?domain=www.youtube.com
+# Only domain-scoped @@ exceptions appear in the pruned set; the generic block
+# rule that would cover this was pruned. Measured gap.
+ads	allow	image	https://www.googletagservices.com/tag/js/gpt.js
+# google-analytics is not in the pruned set (easyprivacy-core keeps path rules
+# for site scripts, not the host). Measured gap.
+ads	allow	xmlhttprequest	https://ssl.google-analytics.com/collect?v=1&tid=UA-1
+
+# --- ADS with case tricks (must still be blocked) -------------------------
+ads	block	script	https://PAGEAD2.GOOGLESYNDICATION.COM/pagead/js/adsbygoogle.js
+ads	block	image	HTTPS://STATIC.DOUBLECLICK.NET/instream/ad_status.js
+
+# --- CONTENT: video delivery, player, thumbnails: must never be blocked ---
+content	allow	media	https://rr1---sn-ab5l6nsk.googlevideo.com/videoplayback?expire=1700000000&ei=abc&ip=1.2.3.4&id=o-abc&itag=137&mime=video%2Fmp4&ns=abc&pl=23&ratebypass=yes&requiressl=yes&sparams=expire%2Cei%2Cip%2Cid%2Citag%2Cmime%2Cns%2Cpl%2Cratebypass%2Crequiressl%2Csparams&sig=abc
+content	allow	media	https://rr3---sn-2gb7sn7s.googlevideo.com/videoplayback?expire=1700000001&itag=140&mime=audio%2Fmp4&id=o-def
+content	allow	media	https://redirector.googlevideo.com/videoplayback?expire=1700000002&itag=22
+content	allow	xmlhttprequest	https://www.youtube.com/youtubei/v1/player?key=AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8
+content	allow	xmlhttprequest	https://www.youtube.com/youtubei/v1/next?key=AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8
+content	allow	xmlhttprequest	https://www.youtube.com/youtubei/v1/browse?key=AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8
+content	allow	script	https://www.youtube.com/s/desktop/abc123/js/base.js
+content	allow	script	https://www.youtube.com/s/player/abc123/player_ias.vflset/en_US/base.js
+content	allow	stylesheet	https://www.youtube.com/s/desktop/abc123/cssbin/www-main-desktop.css
+content	allow	image	https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg
+content	allow	image	https://i.ytimg.com/vi_webp/dQw4w9WgXcQ/maxresdefault.webp
+content	allow	document	https://www.youtube.com/tv
+content	allow	document	https://www.youtube.com/
+content	allow	xmlhttprequest	https://www.youtube.com/api/stats/watchtime?ns=yt&el=detailpage&cpn=abc
+content	allow	media	https://manifest.googlevideo.com/api/manifest/hls_playlist/expire/1700000003/ei/abc/id/def/itag/96/playlist/index.m3u8
+
+# --- CONTENT with case tricks (must still be allowed) ---------------------
+content	allow	media	HTTPS://RR1---SN-AB5L6NSK.GOOGLEVIDEO.COM/videoplayback?expire=1700000004&itag=137
+content	allow	xmlhttprequest	HTTPS://WWW.YOUTUBE.COM/YOUTUBEI/V1/PLAYER?KEY=abc

@@ -196,3 +196,122 @@ fn generated_ubo_scriptlets_resolve_pinned_rules() {
         "no unresolved template placeholders may remain: {injected}"
     );
 }
+
+// ---------------------------------------------------------------------------
+// Case-normalisation: the engine consulted adblock 0.13.5 with the URL exactly
+// as the WebView handed it over. The crate lower-cases the scheme but NOT an
+// all-ASCII host (url_parser/parser.rs parse_host writes `{host_str}` verbatim
+// and only calls idna::domain_to_ascii for non-ASCII hosts), and
+// `cpt_match_type` is an exact-case `match`. Both were exploitable: a list rule
+// and a request that differ only in host case did not match, and "SCRIPT"
+// became RequestType::Other.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn host_case_does_not_bypass_a_blocking_rule() {
+    let engine = engine_with(BASE_RULES, serde_json::json!([]));
+    for url in [
+        "https://doubleclick.net/ads/banner.js",
+        "HTTPS://doubleclick.net/ads/banner.js",
+        "https://DOUBLECLICK.NET/ads/banner.js",
+        "HTTPS://DOUBLECLICK.NET/ads/banner.js",
+        "Https://DoubleClick.Net/ads/banner.js",
+    ] {
+        assert!(
+            engine.check_request(url, "https://www.youtube.com/tv", "script"),
+            "host case must not bypass the rule: {url}"
+        );
+    }
+}
+
+#[test]
+fn request_type_case_is_canonicalised() {
+    let engine = engine_with(BASE_RULES, serde_json::json!([]));
+    for kind in ["script", "SCRIPT", "Script", "ScRiPt"] {
+        assert!(
+            engine.check_request(
+                "https://ads.example.org/creative.js",
+                "https://www.youtube.com/tv",
+                kind
+            ),
+            "request type {kind} must be canonicalised to `script`"
+        );
+    }
+}
+
+#[test]
+fn player_endpoint_survives_every_case_variant() {
+    // A rule that matches the player endpoint in any case, plus the
+    // allow-list, which must also be case-insensitive.
+    let rules = "||youtube.com/youtubei/v1/player^\n||youtube.com/youtubei/v1/next^\n";
+    let engine = engine_with(rules, serde_json::json!([]));
+    for url in [
+        "https://www.youtube.com/youtubei/v1/player?key=a",
+        "HTTPS://WWW.YOUTUBE.COM/YOUTUBEI/V1/PLAYER?KEY=A",
+        "https://www.YouTube.com/Youtubei/v1/Player",
+        "HTTPS://www.youtube.com/youtubei/v1/NEXT",
+    ] {
+        assert!(
+            !engine.check_request(url, "https://www.youtube.com/tv", "xhr"),
+            "player endpoint must never be blocked, not even upper-cased: {url}"
+        );
+    }
+}
+
+#[test]
+fn path_case_is_preserved_for_case_sensitive_rules() {
+    // Only scheme + authority may be lower-cased; the path must reach the
+    // engine byte-for-byte.
+    //
+    // NOTE on how this is asserted: adblock 0.13.5 compiles plain substring
+    // rules case-insensitively, so a verdict-based assertion cannot distinguish
+    // "we preserved the path" from "the rule was case-insensitive" — measured,
+    // `/Ad_300x250/` matches both `/Ad_300x250/` and `/ad_300x250/` with or
+    // without normalisation. The invariant is therefore tested at the unit that
+    // implements it: the normaliser itself must leave the path untouched.
+    use shieldtube::engine::normalise_scheme_and_host;
+
+    assert_eq!(
+        normalise_scheme_and_host("https://CDN.Example.COM/Ad_300x250/X.PNG?a=B#Frag"),
+        "https://cdn.example.com/Ad_300x250/X.PNG?a=B#Frag",
+        "authority lower-cased, path/query/fragment untouched"
+    );
+    assert_eq!(
+        normalise_scheme_and_host("https://cdn.example.com/Ad_300x250/X.PNG"),
+        "https://cdn.example.com/Ad_300x250/X.PNG",
+        "already-normal URL must be returned unchanged (no allocation path)"
+    );
+    assert_eq!(
+        normalise_scheme_and_host("MAILTO:Someone@Example.COM"),
+        "mailto:Someone@Example.COM",
+        "opaque scheme: scheme lower-cased, rest untouched"
+    );
+    assert_eq!(normalise_scheme_and_host("not a url"), "not a url");
+    assert_eq!(normalise_scheme_and_host(""), "");
+
+    // And the engine still honours the rule it was given.
+    let engine = engine_with("/Ad_300x250/\n", serde_json::json!([]));
+    assert!(engine.check_request(
+        "https://cdn.example.com/Ad_300x250/banner.png",
+        "https://www.youtube.com/tv",
+        "image"
+    ));
+}
+
+#[test]
+fn opaque_and_malformed_schemes_do_not_panic() {
+    let engine = engine_with(BASE_RULES, serde_json::json!([]));
+    for url in [
+        "mailto:a@b.c",
+        "data:text/html,<b>x</b>",
+        "javascript:alert(1)",
+        "http:foo",
+        "//cdn.example.com/a.js",
+        ":::::",
+        "",
+        " ",
+    ] {
+        let verdict = engine.check_request(url, "https://www.youtube.com/tv", "script");
+        assert!(!verdict, "must fail open and not panic: {url:?}");
+    }
+}

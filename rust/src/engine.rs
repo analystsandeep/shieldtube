@@ -9,6 +9,7 @@ use adblock::{
     resources::{PermissionMask, Resource},
     Engine,
 };
+use std::borrow::Cow;
 use std::sync::RwLock;
 
 /// Safe fallback returned when a cosmetic query cannot be serialised.
@@ -20,7 +21,91 @@ pub const EMPTY_COSMETIC_JSON: &str = r#"{"hide_selectors":[],"procedural_action
 pub const FULL_TRUST: PermissionMask = PermissionMask::from_bits(0xff);
 
 /// Never block these; killing the player endpoint kills playback (preamble §8).
+/// Compared case-insensitively: an upper-cased request (HTTPS://WWW.YOUTUBE.COM/
+/// YOUTUBEI/V1/PLAYER) must be caught by this allow-list too, or a list rule
+/// could kill playback through a case variant.
 const PLAYER_ENDPOINT_FRAGMENTS: [&str; 2] = ["youtubei/v1/player", "youtubei/v1/next"];
+
+/// Lowercase the ASCII scheme and authority, leave everything else untouched.
+///
+/// Why this is necessary rather than defensive: `url::Url` and browsers
+/// lower-case the scheme and host, but only the *first*. A request can arrive
+/// as `HTTPS://GoogleTagServices.COM/x` and mean exactly the same thing.
+///
+/// adblock 0.13.5 normalises the scheme (`parser.rs:332`,
+/// `'A'..='Z' => push(c.to_ascii_lowercase())`) but NOT an all-ASCII host:
+/// `parse_host` does `write!(&mut self.serialization, "{host_str}")` verbatim
+/// and only calls `idna::domain_to_ascii` for non-ASCII hosts. Its filter
+/// matching is therefore case-sensitive on the host, and
+/// `RequestType` mapping (`cpt_match_type`) is case-sensitive on the type
+/// string. Measured before this fix: `https://DOUBLECLICK.NET/a.js` was NOT
+/// blocked while `https://doubleclick.net/a.js` was.
+///
+/// Only the scheme and authority are rewritten, and only if they contain an
+/// ASCII upper-case byte, so the common all-lowercase path does not allocate
+/// and the path/query/fragment are passed through byte for byte (a filter like
+/// `/Ad_300x250/` may be case-sensitive on purpose).
+pub fn normalise_scheme_and_host(url: &str) -> Cow<'_, str> {
+    // scheme end
+    let scheme_end = match url.find(':') {
+        Some(i) => i,
+        None => return Cow::Borrowed(url),
+    };
+    if !url[..scheme_end]
+        .bytes()
+        .all(|b| b.is_ascii_alphanumeric() || b == b'+' || b == b'-' || b == b'.')
+    {
+        return Cow::Borrowed(url); // not a scheme; leave it alone
+    }
+    // Authority starts after "://" or, for scheme-relative forms, "//".
+    // Anything else (mailto:, data:, javascript:, "http:foo") has no authority.
+    let rest = &url[scheme_end..];
+    let auth_start = if rest.starts_with("://") {
+        scheme_end + 3
+    } else if rest.starts_with("//") {
+        scheme_end + 2
+    } else {
+        return lowercase_prefix(url, scheme_end);
+    };
+    let auth = &url[auth_start..];
+    let auth_end = auth
+        .find(['/', '?', '#'])
+        .map(|i| auth_start + i)
+        .unwrap_or(url.len());
+    let candidate = &url[..auth_end];
+    let needs_lower = candidate.bytes().any(|b| b.is_ascii_uppercase());
+    if !needs_lower {
+        return Cow::Borrowed(url);
+    }
+    let mut out = String::with_capacity(url.len());
+    out.push_str(&candidate.to_ascii_lowercase());
+    out.push_str(&url[auth_end..]);
+    Cow::Owned(out)
+}
+
+/// Lowercase just the scheme part of an opaque URL (no authority).
+fn lowercase_prefix(url: &str, scheme_end: usize) -> Cow<'_, str> {
+    if url[..scheme_end].bytes().any(|b| b.is_ascii_uppercase()) {
+        let mut out = String::with_capacity(url.len());
+        out.push_str(&url[..scheme_end].to_ascii_lowercase());
+        out.push_str(&url[scheme_end..]);
+        Cow::Owned(out)
+    } else {
+        Cow::Borrowed(url)
+    }
+}
+
+/// Canonical request type. `cpt_match_type` in adblock 0.13.5 is an exact-match
+/// `match`, so "SCRIPT" would silently become `RequestType::Other` and a
+/// `$script` rule would stop matching. Kotlin already sends lower case; this
+/// makes the Rust entry points safe for every caller (including the C ABI).
+fn canonical_request_type(request_type: &str) -> Cow<'_, str> {
+    if request_type.bytes().any(|b| b.is_ascii_uppercase()) {
+        Cow::Owned(request_type.to_ascii_lowercase())
+    } else {
+        Cow::Borrowed(request_type)
+    }
+}
 
 #[derive(Clone, Debug, serde::Deserialize)]
 pub struct ListEntry {
@@ -137,11 +222,19 @@ impl ShieldEngine {
     /// request_type, method); a wrong request_type produces false positives,
     /// so Kotlin maps WebView resource types explicitly (RequestTypeMapper.kt).
     pub fn check_request(&self, url: &str, source_url: &str, request_type: &str) -> bool {
-        if PLAYER_ENDPOINT_FRAGMENTS.iter().any(|p| url.contains(p)) {
+        let url = normalise_scheme_and_host(url);
+        let source_url = normalise_scheme_and_host(source_url);
+        let request_type = canonical_request_type(request_type);
+        // Case-insensitive on purpose: see PLAYER_ENDPOINT_FRAGMENTS.
+        let lowered_url = url.to_ascii_lowercase();
+        if PLAYER_ENDPOINT_FRAGMENTS
+            .iter()
+            .any(|p| lowered_url.contains(p))
+        {
             return false;
         }
         let guard = self.state.read().unwrap_or_else(|p| p.into_inner());
-        match Request::new(url, source_url, request_type, "get") {
+        match Request::new(&url, &source_url, &request_type, "get") {
             Ok(request) => guard.engine.check_network_request(&request).should_block(),
             Err(_) => false, // unparseable URL: fail open, never break playback
         }

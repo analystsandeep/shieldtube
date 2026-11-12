@@ -7,7 +7,7 @@ document-start scriptlets, cosmetic filtering and an ad-state watchdog. No
 proxy, no VPN, no DNS trick, no backend, no telemetry.
 
 **Status (2026-11-11, refreshed after toolchain rebuild):** step 1 + minimal
-player complete. `cargo fmt`, `cargo clippy -D warnings`, 9 Rust tests, 2
+player complete. `cargo fmt`, `cargo clippy -D warnings`, 10 Rust tests, 2
 JVM/JNI tests, bundled-list checksums, four Rust `cdylib`s, `lintDebug` (0
 errors), `assembleDebug`, `assembleRelease` and `apksigner verify` are all green.
 The GitHub Actions workflow is written and its local equivalents pass, but it

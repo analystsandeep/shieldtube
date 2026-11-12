@@ -36,7 +36,7 @@ bash scripts/fetch-lists.sh          # blobs pinned by commit SHA
 bash scripts/verify-checksums.sh app/src/main/assets/lists
 
 # 4. Prove the engine before any UI
-cargo test --manifest-path rust/Cargo.toml -- --nocapture       # 9 tests
+cargo test --manifest-path rust/Cargo.toml -- --nocapture       # 10 tests
 ./gradlew testDebugUnitTest                                     # JNI/JVM, 2 tests
 
 # 5. Build the four cdylibs
@@ -111,7 +111,7 @@ Verified: `apksigner verify` on `app-release.apk` →
 ```
 cargo fmt --check .................. exit 0
 cargo clippy --all-targets -D warnings  exit 0
-cargo test ......................... 9 passed; 0 failed
+cargo test ......................... 10 passed; 0 failed
 lintDebug .......................... BUILD SUCCESSFUL, 0 errors
 testDebugUnitTest .................. 2 passed; 0 failed
 assembleDebug + assembleRelease .... BUILD SUCCESSFUL in 1m 7s (same Gradle run)

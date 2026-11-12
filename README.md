@@ -10,15 +10,16 @@ proxy, no VPN, no DNS trick, no backend, no telemetry.
 player complete. `cargo fmt`, `cargo clippy -D warnings`, 10 Rust tests, 2
 JVM/JNI tests, bundled-list checksums, four Rust `cdylib`s, `lintDebug` (0
 errors), `assembleDebug`, `assembleRelease` and `apksigner verify` are all green.
-The GitHub Actions workflow is written and its local equivalents pass, but it
-has not been runner-validated. Settings / cosmetic layer / watchdog / in-app
-"Open source" screen remain deferred per the project lead's priority change.
+The GitHub Actions workflow has now been runner-validated: run #1 failed on a
+bad `sdkmanager` path (fixed in `ff0ceba`). The local equivalent of every gate
+is green. The settings screen, cosmetic layer, watchdog and in-app "Open
+source" screen all exist (they were listed here as deferred until 2026-11-12).
 
 Verified outputs (regenerated in this sandbox, not distributable):
-`apks/app-debug.apk` (17,640,988 B) and
-`apks/app-release.apk` (15,522,295 B, debug-signed). Their canonical Gradle
-outputs are `app/build/outputs/apk/debug/app-debug.apk` and
-`app/build/outputs/apk/release/app-release.apk`.
+`app/build/outputs/apk/debug/app-debug.apk` (18,008,806 B) and
+`app/build/outputs/apk/release/app-release.apk` (15,615,335 B, debug-signed,
+GPLv3 uBO source tree excluded — see `docs/LICENSING.md`). `apks/` holds only a
+README: APK binaries are not committed, because `.gitignore` has `*.apk`.
 
 > Sandbox note: `.git/`, `.cache/` (toolchain) and `app/build/` are excluded from
 > workspace snapshots, so after a turn boundary the toolchain and APK must be
@@ -67,13 +68,16 @@ GPL-3.0. Vendored MPL files keep their MPL headers. See `docs/LICENSING.md`.
 
 ## Remaining work (lead priority change, 2026-11-11)
 
-- Settings screen (Shields toggle, list update, UA override, counters, open
-  source, clear data) — including the user-facing activation-flow notice.
-- Cosmetic layer and ad-state watchdog (the document-start shim and network
-  blocking land with the minimal player).
-- In-app "Open source" screen; `docs/LICENSING.md` still contains a
-  `SOURCE_URL` placeholder that must be replaced before public distribution.
-- Generic uBO scriptlet coverage (`docs/SPEC-DEVIATIONS.md` §7b).
-- GitHub Actions runner validation (the workflow and local gates exist).
-- Connected instrumented smoke test on real hardware (the test source exists).
-- Real-device §9 acceptance run (lead confirmed a real ARM TV box is available).
+- Replace the `SOURCE_URL` placeholder before any public distribution
+  (`docs/LICENSING.md`).
+- Per-list attribution + checksum display in the Open source screen
+  (`SOURCES.json` and `CHECKSUMS.sha256` ship but are not rendered).
+- Connected instrumented smoke test on real hardware (source exists;
+  `docs/ON-DEVICE-TEST.md` is the manual checklist).
+- Real-device acceptance run on an ARM TV box.
+- D-pad DOM focus traversal inside the YouTube page.
+
+Done and removed from this list on 2026-11-12: settings screen, cosmetic layer,
+ad-state watchdog, in-app "Open source" screen, generic uBO scriptlet coverage
+(`SOURCES.json` unresolvedScriptletReferences is empty), GitHub Actions runner
+validation.

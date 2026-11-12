@@ -43,7 +43,19 @@
     <string name="source_url_label">Source repository</string>
     <string name="source_url_pending">Pending: %1$s. Replace SHIELDTUBE_SOURCE_URL before publishing.</string>
     <string name="view_source">Open source repository</string>
-    <string name="open_source_body">ShieldTube is GPL-3.0-or-later. adblock-rust and Brave lists are MPL-2.0; uBlock Origin scriptlets and lists are GPL-3.0. The complete corresponding uBO source is bundled under assets/legal/ubo/. See docs/LICENSING.md.</string>
+    <!-- O4 (docs/DRIFT-REPORT.md): the previous wording promised that the
+         complete uBO source is "bundled under assets/legal/ubo/" inside the
+         APK. That is true for debug builds but release APKs exclude that tree
+         (843,659 B of files no runtime code reads), so the promise was false in
+         the artefact users install. This wording is true in BOTH variants: it
+         points at the source repository, which is where that material lives,
+         and names only files that are actually packaged with the app.
+         Wording is deliberately order-independent ("named on this screen"):
+         in OpenSourceActivity the URL row is added AFTER the body, so a
+         "shown above" phrasing would have been wrong.
+         No apostrophes: Android XML requires escaping them and a missed escape
+         silently truncates the string. -->
+    <string name="open_source_body">ShieldTube is open source under GPL-3.0-or-later. The complete source code, including the corresponding source for the uBlock Origin scriptlets and filter lists used by this app, is in the source repository named on this screen; the pinned upstream commits are recorded in assets/lists/SOURCES.json, which ships with this app, and in docs/LICENSING.md. adblock-rust and the Brave filter lists are MPL-2.0; uBlock Origin scriptlets and lists are GPL-3.0. The GPLv3 text is shown below.</string>
     <string name="license_title">GNU General Public License v3</string>
     <string name="source_link_unavailable">Source URL is still pending; see docs/LICENSING.md</string>
 

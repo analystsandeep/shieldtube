@@ -45,12 +45,18 @@ fn hostile_list_content_never_panics_and_keeps_invariants() {
     let cases: Vec<(&str, String)> = vec![
         ("empty list", String::new()),
         ("only newlines", "\n\n\n\n".to_string()),
-        ("garbage", "!!!@@@ ### $$$ %%% ^^^ &&& *** ((()))".to_string()),
+        (
+            "garbage",
+            "!!!@@@ ### $$$ %%% ^^^ &&& *** ((()))".to_string(),
+        ),
         (
             "binary-ish",
             "\u{1}\u{2}\u{3}\u{7}\u{8}\u{b}\u{c}\u{1b}\u{7f}".to_string(),
         ),
-        ("BOM + CRLF", "\u{feff}||doubleclick.net^\r\n||ads.y^\r\n".to_string()),
+        (
+            "BOM + CRLF",
+            "\u{feff}||doubleclick.net^\r\n||ads.y^\r\n".to_string(),
+        ),
         ("CR only", "||doubleclick.net^\r||ads.z^\r".to_string()),
         ("lone surrogate-ish escape", "||a^\\ud800".to_string()),
         (
@@ -63,9 +69,15 @@ fn hostile_list_content_never_panics_and_keeps_invariants() {
         ),
         ("10k blank lines", "\n".repeat(10_000)),
         ("regex bomb", "/^(a+)+$/$script\n".to_string()),
-        ("deeply nested cosmetic", format!("##{}", ":not(".repeat(200))),
+        (
+            "deeply nested cosmetic",
+            format!("##{}", ":not(".repeat(200)),
+        ),
         ("unterminated regex", "/(abc/$script\n".to_string()),
-        ("hosts format junk", "0.0.0.0\n0.0.0.0 #comment\n::1\n".to_string()),
+        (
+            "hosts format junk",
+            "0.0.0.0\n0.0.0.0 #comment\n::1\n".to_string(),
+        ),
         (
             "scriptlet with no resource",
             "youtube.com##+js(does-not-exist.js, arg)\n".to_string(),
@@ -85,7 +97,11 @@ fn hostile_list_content_never_panics_and_keeps_invariants() {
         if let Ok(engine) = outcome.unwrap() {
             // Invariants that must hold whatever the list contained.
             assert!(
-                !engine.check_request("https://www.youtube.com/youtubei/v1/player?key=x", YT, "xhr"),
+                !engine.check_request(
+                    "https://www.youtube.com/youtubei/v1/player?key=x",
+                    YT,
+                    "xhr"
+                ),
                 "player endpoint blocked after loading hostile list: {label}"
             );
             let cosmetic = engine.cosmetic_for("https://www.youtube.com/watch?v=x");
@@ -117,7 +133,8 @@ fn hostile_list_cannot_kill_the_player_even_when_it_applies() {
 #[test]
 fn hostile_list_does_not_block_first_party_assets_when_rules_are_traffic_shaped() {
     // Realistic list content (not the *$script bomb, which legitimately would).
-    let engine = engine_with("||doubleclick.net^\n||googlesyndication.com^\n||ads.example.org^$script\n");
+    let engine =
+        engine_with("||doubleclick.net^\n||googlesyndication.com^\n||ads.example.org^$script\n");
     for url in [
         "https://www.youtube.com/s/desktop/abc/js/base.js",
         "https://www.youtube.com/s/player/abc/player_ias.vflset/en_US/base.js",
@@ -278,7 +295,10 @@ fn concurrent_check_request_is_deterministic_and_does_not_deadlock() {
         ("https://ads.example.org/a.js".into(), "script"),
         ("https://ads.example.org/a.png".into(), "image"),
         ("https://www.youtube.com/s/desktop/base.js".into(), "script"),
-        ("https://www.youtube.com/youtubei/v1/player?key=x".into(), "xhr"),
+        (
+            "https://www.youtube.com/youtubei/v1/player?key=x".into(),
+            "xhr",
+        ),
     ];
     let expected: Vec<bool> = cases
         .iter()
@@ -322,7 +342,9 @@ fn concurrent_readers_survive_a_concurrent_rebuild() {
                 }]
             })
             .to_string();
-            writers_engine.add_lists(&payload).expect("rebuild must succeed");
+            writers_engine
+                .add_lists(&payload)
+                .expect("rebuild must succeed");
         }
     });
 
@@ -333,7 +355,8 @@ fn concurrent_readers_survive_a_concurrent_rebuild() {
             for _ in 0..500 {
                 // Must never panic, block forever, or see a torn engine.
                 let _ = engine.check_request("https://doubleclick.net/a.js", YT, "script");
-                let _ = engine.check_request("https://www.youtube.com/youtubei/v1/player", YT, "xhr");
+                let _ =
+                    engine.check_request("https://www.youtube.com/youtubei/v1/player", YT, "xhr");
                 let json = engine.cosmetic_for("https://www.youtube.com/watch?v=x");
                 assert!(serde_json::from_str::<serde_json::Value>(&json).is_ok());
             }
@@ -361,10 +384,16 @@ fn block_decision_latency_envelope() {
 
     let corpus: Vec<(&str, &str)> = vec![
         ("https://doubleclick.net/ads/banner.js", "script"),
-        ("https://www.googlesyndication.com/pagead/js/adsbygoogle.js", "script"),
+        (
+            "https://www.googlesyndication.com/pagead/js/adsbygoogle.js",
+            "script",
+        ),
         ("https://www.youtube.com/s/desktop/abc/js/base.js", "script"),
         ("https://i.ytimg.com/vi/abc/hqdefault.jpg", "image"),
-        ("https://rr1---sn-abc.googlevideo.com/videoplayback?expire=1", "media"),
+        (
+            "https://rr1---sn-abc.googlevideo.com/videoplayback?expire=1",
+            "media",
+        ),
         ("https://www.youtube.com/youtubei/v1/next?key=a", "xhr"),
         ("https://cdn.example.com/style.css", "stylesheet"),
         ("https://analytics.example.com/collect?v=1", "xhr"),
@@ -440,7 +469,10 @@ fn full_list_rebuild_time_envelope() {
     let start = Instant::now();
     let engine = ShieldEngine::create(&payload).expect("full list set must build");
     let first = start.elapsed();
-    println!("[perf] cold build of all 6 shipped lists: {first:?} ({} bytes of JSON)", payload.len());
+    println!(
+        "[perf] cold build of all 6 shipped lists: {first:?} ({} bytes of JSON)",
+        payload.len()
+    );
     assert!(engine.check_request("https://doubleclick.net/a.js", YT, "script"));
 
     // A rebuild is what ListUpdater triggers; time it as the user experiences it.

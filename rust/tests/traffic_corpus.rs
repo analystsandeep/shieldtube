@@ -17,12 +17,30 @@ const SOURCE: &str = "https://www.youtube.com/tv";
 fn shipped_engine() -> ShieldEngine {
     // Exactly the lists the APK carries, in the same order the app loads them.
     let lists = [
-        ("brave-specific", include_str!("../../app/src/main/assets/lists/brave-specific.txt")),
-        ("ubo-filters", include_str!("../../app/src/main/assets/lists/ubo-filters.txt")),
-        ("ubo-unbreak", include_str!("../../app/src/main/assets/lists/ubo-unbreak.txt")),
-        ("easylist-core", include_str!("../../app/src/main/assets/lists/easylist-core.txt")),
-        ("easyprivacy-core", include_str!("../../app/src/main/assets/lists/easyprivacy-core.txt")),
-        ("brave-unbreak", include_str!("../../app/src/main/assets/lists/brave-unbreak.txt")),
+        (
+            "brave-specific",
+            include_str!("../../app/src/main/assets/lists/brave-specific.txt"),
+        ),
+        (
+            "ubo-filters",
+            include_str!("../../app/src/main/assets/lists/ubo-filters.txt"),
+        ),
+        (
+            "ubo-unbreak",
+            include_str!("../../app/src/main/assets/lists/ubo-unbreak.txt"),
+        ),
+        (
+            "easylist-core",
+            include_str!("../../app/src/main/assets/lists/easylist-core.txt"),
+        ),
+        (
+            "easyprivacy-core",
+            include_str!("../../app/src/main/assets/lists/easyprivacy-core.txt"),
+        ),
+        (
+            "brave-unbreak",
+            include_str!("../../app/src/main/assets/lists/brave-unbreak.txt"),
+        ),
     ];
     let payload = serde_json::json!({
         "lists": lists.iter().map(|(name, text)| serde_json::json!({
@@ -78,15 +96,22 @@ fn corpus_has_the_expected_shape() {
     assert!(content >= 12, "too few content URLs: {content}");
     // The corpus must contain at least one case-trick URL per class, otherwise
     // the case-normalisation regression would not be covered here.
-    assert!(r.iter().any(|x| x.class == "ads" && x.url.contains("GOOGLESYNDICATION")));
-    assert!(r.iter().any(|x| x.class == "content" && x.url.contains("GOOGLEVIDEO")));
+    assert!(r
+        .iter()
+        .any(|x| x.class == "ads" && x.url.contains("GOOGLESYNDICATION")));
+    assert!(r
+        .iter()
+        .any(|x| x.class == "content" && x.url.contains("GOOGLEVIDEO")));
 
     // Coverage gaps found by this corpus are recorded in the file as `allow`
     // with a "MEASURED GAP" comment. Pin the count so a list change that closes
     // one (good) forces the corpus to be updated rather than drifting silently.
     let gap_mentions = CORPUS.matches("MEASURED GAP").count();
     println!("[corpus] documented list-coverage gaps: {gap_mentions}");
-    assert!(gap_mentions > 0, "expected the known gaps to stay documented");
+    assert!(
+        gap_mentions > 0,
+        "expected the known gaps to stay documented"
+    );
 }
 
 #[test]

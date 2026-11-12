@@ -106,9 +106,13 @@ per document
 15. **Engine rebuild on list update** — rules are immutable in 0.13.5, so
     `addLists(replace=true)` rebuilds; on any failure the previous engine stays
     active.
-16. **Airplane mode** — all lists + resources are bundled assets; no network
-    needed for blocking (verified: 1,191,228 B = 1.14 MiB of lists + resources
-    inside the APK; the 2 MiB cap has 0.86 MiB headroom).
+16. **Airplane mode — runtime blocking only.** All lists + resources are
+    bundled assets, so **no network is needed for blocking at runtime once the
+    app is installed** (verified: 1,191,228 B = 1.14 MiB of lists + resources
+    inside the APK; the 2 MiB cap has 0.86 MiB headroom). This is a statement
+    about the installed app, **not about building it**: a first build downloads
+    the Gradle distribution, the Rust crates, and the Android SDK/NDK. Playing
+    a video still needs a network; only the ad-blocking decision is offline.
 17. **Memory** — one engine, one WebView, 500-slot preallocated log, splash
     removed after ready, WebView destroyed in `onDestroy`.
 

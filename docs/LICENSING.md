@@ -50,7 +50,7 @@ keep the tree so the packaged bytes can be diffed against
 | `brave/adblock-resources` `dist/resources.json` (pinned `6da9b24…`) | MPL-2.0, **contains uBO-derived GPL-3.0 scriptlets** | `assets/lists/resources.json` | Source: https://github.com/brave/adblock-resources |
 | `uBlockOrigin/uAssets` (pinned `9f1bcde…`) | GPL-3.0 | `assets/lists/ubo-filters.txt`, `ubo-unbreak.txt` | Source: https://github.com/uBlockOrigin/uAssets |
 | `easylist/easylist` (pinned `6282f2d…`) | GPL-3.0 | `assets/lists/easylist-core.txt`, `easyprivacy-core.txt` | Source: https://github.com/easylist/easylist ; canonical lists at https://easylist.to |
-| `gorhill/uBlock` `src/js/resources/scriptlets.js` (pinned `2bc679d…`) | GPL-3.0 | `assets/legal/ubo-scriptlets.js` (verbatim) | Source: https://github.com/gorhill/uBlock |
+| `gorhill/uBlock` `src/js/resources/scriptlets.js` (pinned `2bc679d…`) | GPL-3.0 | repository: `assets/legal/ubo-scriptlets.js` (verbatim). **Debug APK only** — excluded from release APKs, see the packaging table above | Source: https://github.com/gorhill/uBlock |
 | `brave/adblock-rust-ffi` (pinned `5382a06…`) | MPL-2.0 | `vendor/adblock-rust-ffi/` — **reference only, not compiled or linked into the APK** | Source: https://github.com/brave/adblock-rust-ffi |
 | AndroidX / Kotlin stdlib | Apache-2.0 | Gradle dependencies | https://developer.android.com/jetpack |
 

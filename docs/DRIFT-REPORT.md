@@ -20,19 +20,20 @@ build — not by inference.
 | 8 | `docs/BUILD.md:117-125` | APKs at `apks/app-debug.apk` / `apks/app-release.apk` with old sizes | `apks/` contains only `README.md`; `.gitignore` line 10 is `*.apk`. Corrected to the canonical `app/build/outputs/apk/**` paths and this session's real sizes. |
 | 9 | `README.md:12-16` | "Open source screen remains deferred"; "workflow not runner-validated" | Screen exists; CI has now run (run #1 failed on the `sdkmanager` path, fixed in `ff0ceba`). |
 
-## Open items found, deliberately NOT changed in this pass
+## Open items — all six resolved 2026-11-12
 
-Each one needs a decision or a code change beyond a doc edit; none is silently
-fixed.
+O1, O2 and O4 were fixed after the lead's decisions; O3 stays a documented
+tradeoff; O5 and O6 were accepted as-is. Kept below with their resolution so the
+history is auditable.
 
 | # | What | Why it needs a decision |
 |---|---|---|
-| O1 | `README.md` / `docs/BUILD.md` imply a fresh clone builds offline: "Airplane mode — all lists + resources are bundled assets; no network needed for blocking". | True for BLOCKING at runtime; false for BUILDING. A first build downloads the Gradle distribution, ~40 crates, the Android SDK/NDK. The wording is about the app, but it reads as a build guarantee. |
-| O2 | `gradle.properties` sets `-Xmx1200m`; `docs/BUILD.md` documents `-Xmx768m` for this sandbox. | Both are legitimate for different hosts, but the doc should say which is authoritative where. Left as documented guidance rather than changed code. |
-| O3 | `docs/BUILD.md` says the `.so` files are "packaged unstripped" and suggests `android.ndkPath`. | Real warning, reproduced (`stripDebugDebugSymbols` → "Unable to strip … libshieldtube.so"). No functional impact; fixing it would change packaging, so it stays a documented tradeoff. |
-| O4 | `res/values/strings.xml` `open_source_body` tells the user "The complete corresponding uBO source is bundled under `assets/legal/ubo/`". | After the release-asset change this is false in a release APK. Fixing it means reworking the in-app attribution text (a user-visible string) and deciding whether the app should say "in the source repository" instead. Needs the lead's wording decision. |
-| O5 | `docs/ON-DEVICE-TEST.md` (new) — no automated equivalent exists for the manual checklist. | By design; instrumented tests need hardware. |
-| O6 | `scripts/fetch-lists.sh` re-run is claimed deterministic; only the CHECKSUMS verify is exercised in CI. | A full re-vendor run needs network to `raw.githubusercontent.com` at 5 pinned SHAs. Not run in this pass; the pinned blobs and `SOURCES.json` were verified intact instead. |
+| O1 | ~~`README.md` / `docs/BUILD.md` imply a fresh clone builds offline~~ | **FIXED 2026-11-12** (`docs/ARCHITECTURE.md` §16 + new "Network needed to build" in `docs/BUILD.md`): the claim is now explicitly scoped to runtime blocking of an installed app. |
+| O2 | ~~`gradle.properties` sets `-Xmx1200m`; `docs/BUILD.md` documents `-Xmx768m`~~ | **FIXED 2026-11-12**: `docs/BUILD.md` now names `gradle.properties` (-Xmx1200m) as the committed default and `-Xmx768m` as sandbox command-line guidance only. |
+| O3 | `docs/BUILD.md` says the `.so` files are "packaged unstripped" and suggests `android.ndkPath`. | **NO ACTION (lead decision 2026-11-12)**: real warning, reproduced; documented tradeoff stays documented. |
+| O4 | ~~`res/values/strings.xml` `open_source_body` promises "bundled under `assets/legal/ubo/`"~~ | **FIXED 2026-11-12** (commit `448ad09`): now points at the source repository and names only `SOURCES.json` (verified present in the release APK). Wording is order-independent because the URL row renders below the body. Compiled string verified with `aapt2 dump strings`. |
+| O5 | `docs/ON-DEVICE-TEST.md` (new) — no automated equivalent exists for the manual checklist. | **ACCEPTED as-is (lead decision 2026-11-12)**; instrumented tests need hardware. |
+| O6 | `scripts/fetch-lists.sh` re-run is claimed deterministic; only the CHECKSUMS verify is exercised in CI. | **ACCEPTED as-is (lead decision 2026-11-12)**; the pinned blobs and `SOURCES.json` were verified intact instead. |
 
 ## Verified-unchanged (checked, no drift)
 

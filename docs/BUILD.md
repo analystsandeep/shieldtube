@@ -51,6 +51,15 @@ ls app/src/main/jniLibs/
 `./gradlew assembleDebug` also runs `buildRustForAndroid` automatically via
 `preBuild` whenever any of the four `.so` files is missing.
 
+### Network needed to build
+
+The installed app blocks ads with no network (all lists are bundled assets), but
+**building it is not an offline activity**: the first build downloads the Gradle
+distribution, the crates pinned in `rust/Cargo.lock`, and the Android SDK
+platform, build-tools and NDK. Plan for those downloads on a fresh machine or
+runner. `scripts/verify-checksums.sh` runs offline; `scripts/fetch-lists.sh`
+does not (it pins commit SHAs on raw.githubusercontent.com).
+
 ## Rust cross-compilation, exactly
 
 `scripts/build-rust.sh` runs:
@@ -130,13 +139,26 @@ paths are `app/build/outputs/apk/debug/app-debug.apk` and
 `app/build/outputs/apk/release/app-release.apk`. The release APK is
 203,861 bytes smaller than the debug APK's asset set implies because
 `mergeReleaseAssets.doLast` drops the verbatim GPLv3 uBO source tree — see
-`docs/LICENSING.md`. In this ~2 GiB sandbox the
-Android gates were run with
-`./gradlew --no-daemon --max-workers=1 -Dorg.gradle.jvmargs=-Xmx768m` because a
-default Kotlin/Gradle daemon pair can thrash the host (`-Xmx768m` is the
-documented value; this session used `-Xmx900m` for the same reason);
-GitHub-hosted runners use plain `./gradlew` as in
-`.github/workflows/ci.yml`.
+`docs/LICENSING.md`.
+
+### Heap settings: what is committed vs. what is guidance
+
+`gradle.properties` is the **committed default** and sets
+`org.gradle.jvmargs=-Xmx1200m -Dfile.encoding=UTF-8` together with
+`kotlin.compiler.execution.strategy=in-process` and
+`org.gradle.parallel=false`. Use plain `./gradlew` and do not override it.
+
+On a host with ~2 GiB of RAM (this sandbox), a Kotlin daemon plus a Gradle
+daemon can thrash, so the Android gates there were run as:
+
+```bash
+./gradlew --no-daemon --max-workers=1 -Dorg.gradle.jvmargs=-Xmx768m ...
+```
+
+Treat `-Xmx768m` as **sandbox guidance, never a repo change**: it is lower than
+the committed default on purpose and is passed on the command line only. (This
+session used `-Xmx900m` for the same reason — still a command-line override.)
+GitHub-hosted runners use plain `./gradlew` as in `.github/workflows/ci.yml`.
 
 Known non-fatal build warning: `stripDebugDebugSymbols` reports "Unable to
 strip … libshieldtube.so" because AGP's default NDK path is not configured;
